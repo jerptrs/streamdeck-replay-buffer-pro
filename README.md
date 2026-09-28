@@ -8,7 +8,7 @@ A Stream Deck plugin for the [Replay Buffer Pro](https://github.com/JoshuaPotter
 | Action | What it does |
 | --- | --- |
 | **Replay Buffer On/Off** | One key that starts or stops the OBS replay buffer and shows whether it's running. |
-| **Save Last 15 sec** | Saves the last 15 seconds of the replay buffer. |
+| **Save Last 15 sec** | Saves the last 15 seconds. |
 | **Save Last 30 sec** | Saves the last 30 seconds. |
 | **Save Last 60 sec** | Saves the last 60 seconds. |
 | **Save Last 5 min** | Saves the last 5 minutes. |
