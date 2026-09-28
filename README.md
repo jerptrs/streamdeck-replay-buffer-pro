@@ -3,7 +3,9 @@
 [![CI](https://github.com/jerptrs/streamdeck-replay-buffer-pro/actions/workflows/ci.yml/badge.svg)](https://github.com/jerptrs/streamdeck-replay-buffer-pro/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-A Stream Deck plugin for the [Replay Buffer Pro](https://github.com/JoshuaPotter/replay-buffer-pro) OBS plugin.
+A Stream Deck plugin for the [Replay Buffer Pro](https://github.com/JoshuaPotter/replay-buffer-pro) OBS plugin:
+turn OBS's replay buffer on and off, and save anything from the last 15 seconds to the last 30 minutes, each
+with a single key press.
 
 | Action | What it does |
 | --- | --- |
@@ -24,8 +26,8 @@ Other rows: each save key when ready, when the replay buffer is off, when not co
 
 - Stream Deck app 7.1 or newer (Windows 10+ or macOS 12+)
 - OBS Studio 28 or newer (its WebSocket server is built in)
-- The [Replay Buffer Pro](https://github.com/JoshuaPotter/replay-buffer-pro) OBS plugin, with the replay buffer
-  enabled in OBS (Settings → Output → Replay Buffer)
+- The [Replay Buffer Pro](https://github.com/JoshuaPotter/replay-buffer-pro) OBS plugin, version 1.4.0 or newer,
+  with the replay buffer enabled in OBS (Settings → Output → Replay Buffer)
 
 ## Install
 
@@ -33,8 +35,11 @@ Other rows: each save key when ready, when the replay buffer is off, when not co
    [latest release](https://github.com/jerptrs/streamdeck-replay-buffer-pro/releases/latest) and double-click it.
 2. In OBS open **Tools → WebSocket Server Settings**, tick **Enable WebSocket server**, then click
    **Show Connect Info**.
-3. Drag any of the actions onto your Stream Deck. In its settings panel, enter the host (`127.0.0.1` if OBS
-   runs on the same PC), port (default `4455`) and password. These are shared by all keys of this plugin.
+3. Drag any of the actions from the **OBS Replay Buffer Pro** category onto your Stream Deck. In its settings
+   panel, enter the host (`127.0.0.1` if OBS runs on the same PC), port (default `4455`) and password. These
+   are shared by all keys of this plugin.
+
+To update, download the new release and double-click it. Keys already on your Stream Deck keep their settings.
 
 ## How it works
 
@@ -51,12 +56,18 @@ those durations in OBS with "Customize", so each Stream Deck key finds the right
 - **Button 1–6**: always triggers that button. Use this for a remote or portable OBS install with
   customised buttons.
 
-The key's settings panel shows which button it will trigger.
+The key's settings panel shows which button it will trigger. If it says Replay Buffer Pro wasn't found, check
+that the OBS plugin is installed and at least version 1.4.0.
 
 Before triggering a save, the key checks that OBS is connected, that the replay buffer is running and
 that the buffer is long enough for the clip. If any check fails, the key shows the Stream Deck warning
-triangle instead of Replay Buffer Pro popping up a dialog in OBS. Details go to the plugin's log (in the
-Stream Deck plugins folder, under `com.replay-buffer-pro.obs.sdPlugin/logs`).
+triangle instead of Replay Buffer Pro popping up a dialog in OBS. The reason is written to the plugin's log:
+
+- Windows: `%APPDATA%\Elgato\StreamDeck\Plugins\com.replay-buffer-pro.obs.sdPlugin\logs`
+- macOS: `~/Library/Application Support/com.elgato.StreamDeck/Plugins/com.replay-buffer-pro.obs.sdPlugin/logs`
+
+In a multi-action, set the on/off key to its **On** or **Off** state to always start or stop the replay buffer
+instead of toggling it.
 
 ## Security and privacy
 
@@ -94,14 +105,29 @@ To try your build in the Stream Deck app, link the plugin folder once with
 | `src/replay-buffer-pro.ts` | Maps a clip length to a Replay Buffer Pro hotkey. |
 | `src/actions/` | The toggle and save actions. |
 | `src/icons.ts` | SVG artwork for all images, rendered to PNG by `scripts/render-icons.ts`. |
+| `src/key-images.ts` | Loads the rendered key images for the plugin at runtime. |
 | `com.replay-buffer-pro.obs.sdPlugin/ui/settings.html` | Settings panel (property inspector). |
 | `test/e2e.mjs` | End-to-end test. |
 
-### Releasing
+## Contributing
 
-1. Bump `version` in `package.json` and `Version` in the manifest.
-2. Push a tag like `v1.0.1`. CI tests the plugin, packs it with that version, and attaches the
-   `.streamDeckPlugin` file to a new GitHub release.
+Bug reports, ideas and pull requests are welcome.
+
+- **Bugs and feature requests:** [open an issue](https://github.com/jerptrs/streamdeck-replay-buffer-pro/issues).
+  For bugs, include your Stream Deck, OBS and Replay Buffer Pro versions, and the plugin log
+  (see [How it works](#how-it-works) for where to find it).
+- **Pull requests:** fork the repo and create a branch; [Development](#development) covers the setup. Before
+  opening the pull request, run `npm run typecheck`, `npm run validate` and `npm test`. CI runs the same checks.
+  Keep each pull request to one change, and follow the style of the surrounding code.
+- **New clip lengths:** add the length to `SAVE_DURATIONS` and `DURATION_ACCENT` in `src/icons.ts`, add a matching
+  action to `com.replay-buffer-pro.obs.sdPlugin/manifest.json`, then run `npm run icons`.
+- **Artwork:** key images are drawn in `src/icons.ts`. After changing them, run `npm run icons` and commit the
+  updated PNGs. The labels are designed for Arial Bold, which the script picks up on Windows, macOS and WSL.
+- **Security issues:** please don't open a public issue. Report them privately with
+  [Report a vulnerability](https://github.com/jerptrs/streamdeck-replay-buffer-pro/security/advisories/new)
+  on the repo's Security tab.
+
+By contributing, you agree that your contributions are licensed under the [MIT License](LICENSE).
 
 ## Third-party code
 
