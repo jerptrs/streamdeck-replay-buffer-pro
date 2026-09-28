@@ -1,0 +1,54 @@
+{
+    "name": "streamdeck-replay-buffer-pro",
+    "version": "1.0.0",
+    "private": true,
+    "description": "Stream Deck plugin for the Replay Buffer Pro OBS plugin: toggle the replay buffer and save the last 15, 30 or 60 seconds.",
+    "keywords": [
+        "stream-deck",
+        "streamdeck-plugin",
+        "obs",
+        "obs-studio",
+        "replay-buffer"
+    ],
+    "author": "jerptrs",
+    "license": "MIT",
+    "homepage": "https://github.com/jerptrs/streamdeck-replay-buffer-pro#readme",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/jerptrs/streamdeck-replay-buffer-pro.git"
+    },
+    "bugs": {
+        "url": "https://github.com/jerptrs/streamdeck-replay-buffer-pro/issues"
+    },
+    "type": "module",
+    "engines": {
+        "node": ">=24"
+    },
+    "scripts": {
+        "build": "rollup -c",
+        "watch": "rollup -c -w --watch.onEnd=\"streamdeck restart com.replay-buffer-pro.obs\"",
+        "typecheck": "tsc --noEmit",
+        "test": "npm run build && node test/e2e.mjs",
+        "icons": "node scripts/render-icons.ts --preview docs/key-preview.png",
+        "validate": "npm run build && streamdeck validate com.replay-buffer-pro.obs.sdPlugin",
+        "pack": "npm run build && streamdeck pack com.replay-buffer-pro.obs.sdPlugin --output dist --force"
+    },
+    "devDependencies": {
+        "@elgato/cli": "^1.10.1",
+        "@resvg/resvg-js": "^2.6.2",
+        "@rollup/plugin-commonjs": "^29.0.3",
+        "@rollup/plugin-node-resolve": "^16.0.3",
+        "@rollup/plugin-terser": "^1.0.0",
+        "@rollup/plugin-typescript": "^12.3.0",
+        "@tsconfig/node24": "^24.0.5",
+        "@types/node": "~24.1.0",
+        "@types/ws": "^8.18.1",
+        "rollup": "^4.63.5",
+        "tslib": "^2.8.1",
+        "typescript": "^5.9.3"
+    },
+    "dependencies": {
+        "@elgato/streamdeck": "^3.0.1",
+        "ws": "^8.22.0"
+    }
+}

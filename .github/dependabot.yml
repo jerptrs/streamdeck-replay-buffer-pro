@@ -1,0 +1,21 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      dependencies:
+        patterns: ["*"]
+        update-types: [minor, patch]
+    ignore:
+      # Stream Deck runs plugins on Node.js 24; keep the typings on that line.
+      - dependency-name: "@types/node"
+        update-types: [version-update:semver-major]
+      - dependency-name: "@tsconfig/node24"
+        update-types: [version-update:semver-major]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

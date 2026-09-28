@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <title>OBS Replay Buffer Pro Settings</title>
+    <script src="sdpi-components.js"></script>
+    <style>
+        .heading {
+            margin: 14px 8px 4px;
+            font-size: 9pt;
+            font-weight: bold;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            color: #d0d0d0;
+        }
+
+        .status {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            min-height: 22px;
+            font-size: 9pt;
+        }
+
+        .dot {
+            flex: none;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #8a91a3;
+        }
+
+        .dot.ok { background: #34d399; }
+        .dot.busy { background: #ffb020; }
+        .dot.bad { background: #ff3b47; }
+
+        .note {
+            font-size: 8.5pt;
+            line-height: 1.4;
+            color: #9a9a9a;
+        }
+
+        .note.bad { color: #ff8a8a; }
+
+        details.help {
+            margin: 12px 8px 8px;
+            font-size: 8.5pt;
+            line-height: 1.45;
+            color: #b0b0b0;
+        }
+
+        details.help summary {
+            cursor: pointer;
+            color: #d0d0d0;
+        }
+
+        details.help ol {
+            margin: 6px 0 0;
+            padding-left: 18px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="heading">OBS WebSocket</div>
+
+    <sdpi-item label="Host">
+        <sdpi-textfield setting="host" global placeholder="127.0.0.1"></sdpi-textfield>
+    </sdpi-item>
+
+    <sdpi-item label="Port">
+        <sdpi-textfield setting="port" global placeholder="4455" pattern="[0-9]*"></sdpi-textfield>
+    </sdpi-item>
+
+    <sdpi-item label="Password">
+        <sdpi-password setting="password" global placeholder="Leave empty if authentication is off"></sdpi-password>
+    </sdpi-item>
+
+    <sdpi-item label="Status">
+        <div class="status"><span id="status-dot" class="dot"></span><span id="status-text">Waiting for plugin…</span></div>
+    </sdpi-item>
+
+    <div id="save-options" hidden>
+        <div class="heading">Replay Buffer Pro</div>
+
+        <sdpi-item label="OBS button">
+            <sdpi-select setting="slot" default="auto">
+                <option value="auto">Auto (match this key's length)</option>
+                <option value="1">Button 1</option>
+                <option value="2">Button 2</option>
+                <option value="3">Button 3</option>
+                <option value="4">Button 4</option>
+                <option value="5">Button 5</option>
+                <option value="6">Button 6</option>
+            </sdpi-select>
+        </sdpi-item>
+
+        <sdpi-item>
+            <div id="slot-detail" class="note"></div>
+        </sdpi-item>
+    </div>
+
+    <details class="help">
+        <summary>How to connect OBS</summary>
+        <ol>
+            <li>Install the <b>Replay Buffer Pro</b> OBS plugin and enable the replay buffer in OBS (Settings → Output → Replay Buffer).</li>
+            <li>In OBS open <b>Tools → WebSocket Server Settings</b> and tick <b>Enable WebSocket server</b>.</li>
+            <li>Click <b>Show Connect Info</b> and copy the port and password here.</li>
+        </ol>
+        <p>No OBS hotkeys are needed: the keys run Replay Buffer Pro's save actions directly.</p>
+    </details>
+
+    <script>
+        const { streamDeckClient } = SDPIComponents;
+
+        const CONNECTION_TEXT = {
+            connecting: ["busy", "Connecting to OBS…"],
+            disconnected: ["bad", "Not connected. Is OBS running with the WebSocket server enabled?"],
+            "auth-failed": ["bad", "OBS rejected the password."],
+        };
+
+        const REPLAY_TEXT = {
+            started: "replay buffer running",
+            starting: "replay buffer starting…",
+            stopping: "replay buffer stopping…",
+            stopped: "replay buffer off",
+            unavailable: "replay buffer disabled in OBS output settings",
+            unknown: "replay buffer state unknown",
+        };
+
+        function renderStatus(status) {
+            const dot = document.getElementById("status-dot");
+            const text = document.getElementById("status-text");
+
+            if (status.connection === "connected") {
+                const warnings = [];
+                if (!status.replayBufferPro) warnings.push("Replay Buffer Pro not found in OBS");
+                dot.className = "dot " + (warnings.length || status.replay === "unavailable" ? "busy" : "ok");
+                text.textContent = ["Connected", REPLAY_TEXT[status.replay] ?? status.replay, ...warnings].join(" · ");
+            } else {
+                const [tone, message] = CONNECTION_TEXT[status.connection] ?? ["bad", status.connection];
+                dot.className = "dot " + tone;
+                text.textContent = message;
+            }
+
+            const detail = document.getElementById("slot-detail");
+            if (status.slot) {
+                detail.textContent = status.slot.detail;
+                detail.className = "note" + (status.slot.ok ? "" : " bad");
+            }
+        }
+
+        streamDeckClient.sendToPropertyInspector.subscribe(({ payload }) => {
+            if (payload?.event === "status") renderStatus(payload);
+        });
+
+        streamDeckClient.getConnectionInfo().then(({ actionInfo }) => {
+            document.getElementById("save-options").hidden = !/\.save-\d+$/.test(actionInfo.action);
+            streamDeckClient.send("sendToPlugin", { event: "getStatus" });
+        });
+    </script>
+</body>
+
+</html>

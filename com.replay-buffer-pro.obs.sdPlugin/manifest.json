@@ -1,0 +1,103 @@
+{
+	"$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
+	"Name": "OBS Replay Buffer Pro",
+	"Version": "1.0.0.0",
+	"Author": "jerptrs",
+	"Description": "Toggle OBS's replay buffer and save the last 15, 30 or 60 seconds with the Replay Buffer Pro OBS plugin — straight through OBS WebSocket, no OBS hotkeys needed.",
+	"URL": "https://github.com/jerptrs/streamdeck-replay-buffer-pro",
+	"Actions": [
+		{
+			"Name": "Replay Buffer On/Off",
+			"UUID": "com.replay-buffer-pro.obs.toggle",
+			"Icon": "imgs/actions/toggle",
+			"Tooltip": "Starts or stops the OBS replay buffer and shows whether it is running.",
+			"PropertyInspectorPath": "ui/settings.html",
+			"Controllers": [
+				"Keypad"
+			],
+			"DisableAutomaticStates": true,
+			"States": [
+				{
+					"Name": "Off",
+					"Image": "imgs/keys/toggle-off",
+					"ShowTitle": false
+				},
+				{
+					"Name": "On",
+					"Image": "imgs/keys/toggle-on",
+					"ShowTitle": false
+				}
+			]
+		},
+		{
+			"Name": "Save Last 15 sec",
+			"UUID": "com.replay-buffer-pro.obs.save-15",
+			"Icon": "imgs/actions/save",
+			"Tooltip": "Saves the last 15 seconds of the replay buffer using Replay Buffer Pro.",
+			"PropertyInspectorPath": "ui/settings.html",
+			"Controllers": [
+				"Keypad"
+			],
+			"States": [
+				{
+					"Image": "imgs/keys/save-15-ready",
+					"ShowTitle": false
+				}
+			]
+		},
+		{
+			"Name": "Save Last 30 sec",
+			"UUID": "com.replay-buffer-pro.obs.save-30",
+			"Icon": "imgs/actions/save",
+			"Tooltip": "Saves the last 30 seconds of the replay buffer using Replay Buffer Pro.",
+			"PropertyInspectorPath": "ui/settings.html",
+			"Controllers": [
+				"Keypad"
+			],
+			"States": [
+				{
+					"Image": "imgs/keys/save-30-ready",
+					"ShowTitle": false
+				}
+			]
+		},
+		{
+			"Name": "Save Last 60 sec",
+			"UUID": "com.replay-buffer-pro.obs.save-60",
+			"Icon": "imgs/actions/save",
+			"Tooltip": "Saves the last 60 seconds of the replay buffer using Replay Buffer Pro.",
+			"PropertyInspectorPath": "ui/settings.html",
+			"Controllers": [
+				"Keypad"
+			],
+			"States": [
+				{
+					"Image": "imgs/keys/save-60-ready",
+					"ShowTitle": false
+				}
+			]
+		}
+	],
+	"Category": "OBS Replay Buffer Pro",
+	"CategoryIcon": "imgs/plugin/category-icon",
+	"CodePath": "bin/plugin.js",
+	"Icon": "imgs/plugin/marketplace",
+	"SDKVersion": 3,
+	"Software": {
+		"MinimumVersion": "7.1"
+	},
+	"OS": [
+		{
+			"Platform": "mac",
+			"MinimumVersion": "12"
+		},
+		{
+			"Platform": "windows",
+			"MinimumVersion": "10"
+		}
+	],
+	"Nodejs": {
+		"Version": "24"
+	},
+	"UUID": "com.replay-buffer-pro.obs"
+}
