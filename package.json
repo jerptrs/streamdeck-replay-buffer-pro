@@ -1,6 +1,6 @@
 {
     "name": "streamdeck-replay-buffer-pro",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "private": true,
     "description": "Stream Deck plugin for the Replay Buffer Pro OBS plugin: toggle the replay buffer and save the last 15, 30 or 60 seconds.",
     "keywords": [
