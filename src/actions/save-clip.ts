@@ -7,7 +7,7 @@ import streamDeck, {
 	type WillDisappearEvent,
 } from "@elgato/streamdeck";
 
-import { saveKeyName, type SaveDuration, type SaveVariant } from "../icons";
+import { SAVE_DURATIONS, saveKeyName, type SaveDuration, type SaveVariant } from "../icons";
 import { keyImage } from "../key-images";
 import { describe, obs } from "../obs";
 import { formatDuration, resolveSlot, type SlotSetting } from "../replay-buffer-pro";
@@ -16,8 +16,11 @@ const logger = streamDeck.logger.createScope("SaveClip");
 
 /** How long the "SAVED" face stays up. */
 const SAVED_FLASH_MS = 1_500;
-/** Give up waiting for OBS's "replay saved" event after this long. */
-const SAVE_TIMEOUT_MS = 30_000;
+/**
+ * Give up waiting for OBS's "replay saved" event after this long. OBS always writes the whole buffer
+ * before Replay Buffer Pro trims it, which can take a while with long buffers.
+ */
+const SAVE_TIMEOUT_MS = 120_000;
 
 export type SaveClipSettings = {
 	/** Which Replay Buffer Pro button to trigger; see {@link SlotSetting}. */
@@ -147,17 +150,13 @@ abstract class SaveClipAction extends SingletonAction<SaveClipSettings> {
 	}
 }
 
-@action({ UUID: "com.replay-buffer-pro.obs.save-15" })
-export class Save15Seconds extends SaveClipAction {
-	readonly duration = 15;
+function createSaveAction(duration: SaveDuration): SaveClipAction {
+	@action({ UUID: `com.replay-buffer-pro.obs.save-${duration}` })
+	class SaveClip extends SaveClipAction {
+		readonly duration = duration;
+	}
+	return new SaveClip();
 }
 
-@action({ UUID: "com.replay-buffer-pro.obs.save-30" })
-export class Save30Seconds extends SaveClipAction {
-	readonly duration = 30;
-}
-
-@action({ UUID: "com.replay-buffer-pro.obs.save-60" })
-export class Save60Seconds extends SaveClipAction {
-	readonly duration = 60;
-}
+/** One action per clip length, e.g. `com.replay-buffer-pro.obs.save-15` for the last 15 seconds. */
+export const saveActions = SAVE_DURATIONS.map(createSaveAction);

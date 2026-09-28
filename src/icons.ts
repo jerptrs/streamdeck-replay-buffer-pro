@@ -6,7 +6,8 @@
  * the Stream Deck app renders SVG text.
  */
 
-export const SAVE_DURATIONS = [15, 30, 60] as const;
+/** Clip lengths in seconds; the same as Replay Buffer Pro's default buttons. */
+export const SAVE_DURATIONS = [15, 30, 60, 300, 900, 1800] as const;
 export type SaveDuration = (typeof SAVE_DURATIONS)[number];
 
 export const SAVE_VARIANTS = ["ready", "inactive", "offline", "saving", "saved"] as const;
@@ -28,11 +29,14 @@ const RED = "#ff3b47";
 const AMBER = "#ffb020";
 const GREEN = "#34d399";
 
-/** Accent colour per clip length, so the three save keys are easy to tell apart at a glance. */
+/** Accent colour per clip length, so the save keys are easy to tell apart at a glance. */
 const DURATION_ACCENT: Record<SaveDuration, string> = {
 	15: "#38bdf8",
 	30: "#a78bfa",
 	60: "#fb923c",
+	300: "#f472b6",
+	900: "#facc15",
+	1800: "#a3e635",
 };
 
 /** Key file name (without size suffix) for a save key face. */
@@ -106,12 +110,13 @@ function label(text: string, fill: string, size = 29, y = 129): string {
 	return `<text x="${CX}" y="${y}" text-anchor="middle" font-family="${FONT}" font-weight="bold" font-size="${size}" fill="${fill}">${text}</text>`;
 }
 
-/** "15 sec" with the number emphasised. */
+/** "15 sec" or "5 min" with the number emphasised; up to 60 seconds is shown in seconds. */
 function durationLabel(duration: number, numberFill: string, unitFill: string): string {
+	const [value, unit] = duration > 60 ? [duration / 60, "min"] : [duration, "sec"];
 	return (
 		`<text x="${CX}" y="129" text-anchor="middle" font-family="${FONT}" font-weight="bold">` +
-		`<tspan font-size="31" fill="${numberFill}">${duration}</tspan>` +
-		`<tspan font-size="23" fill="${unitFill}" dx="5">sec</tspan>` +
+		`<tspan font-size="31" fill="${numberFill}">${value}</tspan>` +
+		`<tspan font-size="23" fill="${unitFill}" dx="5">${unit}</tspan>` +
 		`</text>`
 	);
 }

@@ -1,6 +1,6 @@
 import streamDeck from "@elgato/streamdeck";
 
-import { Save15Seconds, Save30Seconds, Save60Seconds, type SaveClipSettings } from "./actions/save-clip";
+import { type SaveClipSettings, saveActions } from "./actions/save-clip";
 import { ToggleReplayBuffer } from "./actions/toggle-replay-buffer";
 import { obs, type ObsSettings } from "./obs";
 import { resolveSlot } from "./replay-buffer-pro";
@@ -8,7 +8,6 @@ import { resolveSlot } from "./replay-buffer-pro";
 // "trace" would log every message, including the OBS password in the global settings.
 streamDeck.logger.setLevel("info");
 
-const saveActions = [new Save15Seconds(), new Save30Seconds(), new Save60Seconds()];
 streamDeck.actions.registerAction(new ToggleReplayBuffer());
 saveActions.forEach((action) => streamDeck.actions.registerAction(action));
 

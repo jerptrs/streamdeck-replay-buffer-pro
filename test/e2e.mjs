@@ -133,6 +133,8 @@ const contexts = {
 	save15: { action: `${UUID}.save-15`, settings: {} },
 	save30: { action: `${UUID}.save-30`, settings: {} },
 	save60: { action: `${UUID}.save-60`, settings: {} },
+	save300: { action: `${UUID}.save-300`, settings: {} },
+	save1800: { action: `${UUID}.save-1800`, settings: {} },
 };
 
 const sdMessages = [];
@@ -254,6 +256,17 @@ try {
 	o = obsRequests.length;
 	send("keyDown", "save60");
 	check("60 sec triggers ReplayBufferPro.SaveButton3", await waitFor(() => triggeredSince(o)[0] === "ReplayBufferPro.SaveButton3"), triggeredSince(o)[0]);
+
+	check("5 min key shows its face", face("save300") === "save-300-ready", face("save300"));
+	o = obsRequests.length;
+	send("keyDown", "save300");
+	check("5 min triggers ReplayBufferPro.SaveButton4", await waitFor(() => triggeredSince(o)[0] === "ReplayBufferPro.SaveButton4"), triggeredSince(o)[0]);
+
+	m = sdMessages.length;
+	o = obsRequests.length;
+	send("keyDown", "save1800");
+	check("30 min with a 5 min buffer shows an alert", await waitFor(() => sdSince(m, "showAlert", "save1800").length > 0));
+	check("30 min with a 5 min buffer doesn't reach OBS", triggeredSince(o).length === 0);
 
 	contexts.save30.settings = { slot: "5" };
 	o = obsRequests.length;

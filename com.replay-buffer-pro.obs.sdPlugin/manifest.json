@@ -3,7 +3,7 @@
 	"Name": "OBS Replay Buffer Pro",
 	"Version": "1.0.1.0",
 	"Author": "jerptrs",
-	"Description": "Toggle OBS's replay buffer and save the last 15, 30 or 60 seconds with the Replay Buffer Pro OBS plugin — straight through OBS WebSocket, no OBS hotkeys needed.",
+	"Description": "Toggle OBS's replay buffer and save the last 15 sec, 30 sec, 60 sec, 5 min, 15 min or 30 min with the Replay Buffer Pro OBS plugin — straight through OBS WebSocket, no OBS hotkeys needed.",
 	"URL": "https://github.com/jerptrs/streamdeck-replay-buffer-pro",
 	"Actions": [
 		{
@@ -73,6 +73,54 @@
 			"States": [
 				{
 					"Image": "imgs/keys/save-60-ready",
+					"ShowTitle": false
+				}
+			]
+		},
+		{
+			"Name": "Save Last 5 min",
+			"UUID": "com.replay-buffer-pro.obs.save-300",
+			"Icon": "imgs/actions/save",
+			"Tooltip": "Saves the last 5 minutes of the replay buffer using Replay Buffer Pro.",
+			"PropertyInspectorPath": "ui/settings.html",
+			"Controllers": [
+				"Keypad"
+			],
+			"States": [
+				{
+					"Image": "imgs/keys/save-300-ready",
+					"ShowTitle": false
+				}
+			]
+		},
+		{
+			"Name": "Save Last 15 min",
+			"UUID": "com.replay-buffer-pro.obs.save-900",
+			"Icon": "imgs/actions/save",
+			"Tooltip": "Saves the last 15 minutes of the replay buffer using Replay Buffer Pro.",
+			"PropertyInspectorPath": "ui/settings.html",
+			"Controllers": [
+				"Keypad"
+			],
+			"States": [
+				{
+					"Image": "imgs/keys/save-900-ready",
+					"ShowTitle": false
+				}
+			]
+		},
+		{
+			"Name": "Save Last 30 min",
+			"UUID": "com.replay-buffer-pro.obs.save-1800",
+			"Icon": "imgs/actions/save",
+			"Tooltip": "Saves the last 30 minutes of the replay buffer using Replay Buffer Pro.",
+			"PropertyInspectorPath": "ui/settings.html",
+			"Controllers": [
+				"Keypad"
+			],
+			"States": [
+				{
+					"Image": "imgs/keys/save-1800-ready",
 					"ShowTitle": false
 				}
 			]

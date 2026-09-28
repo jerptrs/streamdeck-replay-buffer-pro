@@ -11,6 +11,9 @@ A Stream Deck plugin for the [Replay Buffer Pro](https://github.com/JoshuaPotter
 | **Save Last 15 sec** | Saves the last 15 seconds of the replay buffer. |
 | **Save Last 30 sec** | Saves the last 30 seconds. |
 | **Save Last 60 sec** | Saves the last 60 seconds. |
+| **Save Last 5 min** | Saves the last 5 minutes. |
+| **Save Last 15 min** | Saves the last 15 minutes. |
+| **Save Last 30 min** | Saves the last 30 minutes. |
 
 ![Key faces](docs/key-preview.png)
 
@@ -39,8 +42,8 @@ The plugin talks to OBS over its built-in WebSocket server and runs Replay Buffe
 directly (obs-websocket's `TriggerHotkeyByName`). You don't have to bind any keys in OBS.
 
 Replay Buffer Pro registers one action per save button: `ReplayBufferPro.SaveButton1` … `SaveButton6`
-(15 s, 30 s, 60 s, 5 min, 15 min and 30 min by default). You can change those durations in OBS with
-"Customize", so each Stream Deck key finds the right button by itself:
+(15 s, 30 s, 60 s, 5 min, 15 min and 30 min by default, one for each Stream Deck key). You can change
+those durations in OBS with "Customize", so each Stream Deck key finds the right button by itself:
 
 - **Auto** (default): matches the key's length against your Replay Buffer Pro buttons. When OBS runs on the
   same computer, it reads Replay Buffer Pro's own settings file (`save_button_settings.json` in OBS's
