@@ -1,7 +1,7 @@
 {
 	"$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
 	"Name": "OBS Replay Buffer Pro",
-	"Version": "1.0.1.0",
+	"Version": "1.1.0.0",
 	"Author": "jerptrs",
 	"Description": "Toggle OBS's replay buffer and save the last 15 sec, 30 sec, 60 sec, 5 min, 15 min or 30 min with the Replay Buffer Pro OBS plugin — straight through OBS WebSocket, no OBS hotkeys needed.",
 	"URL": "https://github.com/jerptrs/streamdeck-replay-buffer-pro",
