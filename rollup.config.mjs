@@ -1,6 +1,5 @@
 import commonjs from "@rollup/plugin-commonjs";
 import nodeResolve from "@rollup/plugin-node-resolve";
-import terser from "@rollup/plugin-terser";
 import typescript from "@rollup/plugin-typescript";
 import path from "node:path";
 import url from "node:url";
@@ -28,6 +27,8 @@ const config = {
 			},
 		},
 		typescript({
+			// Inline TypeScript's few helpers instead of depending on tslib.
+			importHelpers: false,
 			mapRoot: isWatching ? "./" : undefined
 		}),
 		nodeResolve({
@@ -36,7 +37,6 @@ const config = {
 			preferBuiltins: true
 		}),
 		commonjs(),
-		!isWatching && terser(),
 		{
 			name: "emit-module-package-file",
 			generateBundle() {

@@ -245,8 +245,8 @@ class ObsClient {
 }
 
 export function describe(error: unknown): string {
-	if (error instanceof ObsError) {
-		return error.message ? `${error.message} (code ${error.code})` : `code ${error.code}`;
+	if (error instanceof ObsError && error.code >= 0) {
+		return `${error.message} (code ${error.code})`;
 	}
 	return error instanceof Error ? error.message : String(error);
 }

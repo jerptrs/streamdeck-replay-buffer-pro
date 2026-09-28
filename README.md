@@ -87,7 +87,7 @@ To try your build in the Stream Deck app, link the plugin folder once with
 | --- | --- |
 | `src/plugin.ts` | Entry point: registers the actions and wires up settings and the settings panel. |
 | `src/obs.ts` | Keeps the OBS connection alive, reconnects and tracks the replay buffer state. |
-| `src/obs-websocket.ts` | Minimal obs-websocket v5 protocol client. |
+| `src/obs-websocket.ts` | Minimal obs-websocket v5 client on top of Node's built-in WebSocket. |
 | `src/replay-buffer-pro.ts` | Maps a clip length to a Replay Buffer Pro hotkey. |
 | `src/actions/` | The toggle and save actions. |
 | `src/icons.ts` | SVG artwork for all images, rendered to PNG by `scripts/render-icons.ts`. |

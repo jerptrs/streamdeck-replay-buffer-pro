@@ -1,5 +1,4 @@
 import { createHash } from "node:crypto";
-import WebSocket from "ws";
 
 /**
  * Minimal client for the obs-websocket v5 protocol (built into OBS 28+), covering only what this
@@ -63,22 +62,35 @@ export class ObsWebSocket {
 	}
 
 	/**
-	 * Connects and authenticates. Rejects with the close code, e.g. 4009 for a wrong password.
+	 * Connects and authenticates using Node's built-in WebSocket. Rejects with the close code, e.g.
+	 * 4009 for a wrong password.
 	 */
 	connect(url: string, password: string, eventSubscriptions: number): Promise<{ obsWebSocketVersion: string }> {
 		this.disconnect();
 
 		return new Promise((resolve, reject) => {
-			const ws = new WebSocket(url, "obswebsocket.json", { handshakeTimeout: HANDSHAKE_TIMEOUT_MS });
+			let ws: WebSocket;
+			try {
+				ws = new WebSocket(url, "obswebsocket.json");
+			} catch (error) {
+				reject(new ObsError(-1, error instanceof Error ? error.message : String(error)));
+				return;
+			}
+
 			this.#ws = ws;
 			let obsWebSocketVersion = "";
+			const handshakeTimer = setTimeout(() => {
+				if (ws !== this.#ws) return;
+				this.disconnect();
+				reject(new ObsError(-1, "OBS did not respond"));
+			}, HANDSHAKE_TIMEOUT_MS);
 
-			ws.on("message", (raw) => {
+			ws.addEventListener("message", ({ data }) => {
 				if (ws !== this.#ws) return;
 
 				let message: { op: number; d: Record<string, any> };
 				try {
-					message = JSON.parse(raw.toString());
+					message = JSON.parse(String(data));
 				} catch {
 					return;
 				}
@@ -95,6 +107,7 @@ export class ObsWebSocket {
 						break;
 					}
 					case OpCode.Identified:
+						clearTimeout(handshakeTimer);
 						this.#identified = true;
 						resolve({ obsWebSocketVersion });
 						break;
@@ -116,10 +129,10 @@ export class ObsWebSocket {
 				}
 			});
 
-			// "error" is always followed by "close"; only the first rejection of the promise counts.
-			ws.on("error", (error) => reject(new ObsError(-1, error.message)));
-			ws.on("close", (code, reason) => {
-				const error = new ObsError(code, reason.toString() || "Connection closed");
+			// A failed connection fires "error" and then "close"; the close code is the useful part.
+			ws.addEventListener("close", ({ code, reason }) => {
+				clearTimeout(handshakeTimer);
+				const error = new ObsError(code, reason || (code === 1006 ? "Could not connect" : "Connection closed"));
 				const wasIdentified = this.#identified && ws === this.#ws;
 				if (ws === this.#ws) {
 					this.#reset(error);
@@ -135,7 +148,7 @@ export class ObsWebSocket {
 		const ws = this.#ws;
 		if (!ws) return;
 		this.#reset(new ObsError(1000, "Disconnected"));
-		ws.terminate();
+		ws.close();
 	}
 
 	call<T extends keyof Requests>(requestType: T, ...[requestData]: Requests[T][0] extends undefined ? [] : [Requests[T][0]]): Promise<Requests[T][1]> {

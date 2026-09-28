@@ -12,7 +12,8 @@ updates:
       # Stream Deck runs plugins on Node.js 24; keep the typings on that line.
       - dependency-name: "@types/node"
         update-types: [version-update:semver-major]
-      - dependency-name: "@tsconfig/node24"
+      # TypeScript 7 (the Go port) doesn't work with @rollup/plugin-typescript yet.
+      - dependency-name: typescript
         update-types: [version-update:semver-major]
 
   - package-ecosystem: github-actions

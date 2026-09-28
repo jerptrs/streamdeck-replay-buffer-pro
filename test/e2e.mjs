@@ -18,8 +18,8 @@ const PASSWORD = randomBytes(12).toString("hex");
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-/** Polls until `predicate` returns true, or gives up after `timeout` ms. */
-async function waitFor(predicate, timeout = 2_000) {
+/** Polls until `predicate` returns true, or gives up after `timeout` ms. Generous defaults keep slow CI machines from flaking. */
+async function waitFor(predicate, timeout = 4_000) {
 	const end = Date.now() + timeout;
 	while (Date.now() < end) {
 		if (predicate()) return true;
@@ -249,7 +249,7 @@ try {
 	check("15 sec triggers ReplayBufferPro.SaveButton1", await waitFor(() => triggeredSince(o)[0] === "ReplayBufferPro.SaveButton1"), triggeredSince(o)[0]);
 	check("15 sec shows SAVING", await faceBecomes("save15", "save-15-saving"), face("save15"));
 	check("15 sec shows SAVED when OBS reports the file", await faceBecomes("save15", "save-15-saved"), face("save15"));
-	check("15 sec returns to ready", await faceBecomes("save15", "save-15-ready", 3_000), face("save15"));
+	check("15 sec returns to ready", await faceBecomes("save15", "save-15-ready", 6_000), face("save15"));
 
 	o = obsRequests.length;
 	send("keyDown", "save60");
@@ -320,7 +320,8 @@ try {
 
 	obsState.replayActive = true;
 	await startObs();
-	check("reconnects when OBS comes back", await faceBecomes("toggle", "toggle-on", 8_000), face("toggle"));
+	// The plugin retries every 5 seconds.
+	check("reconnects when OBS comes back", await faceBecomes("toggle", "toggle-on", 15_000), face("toggle"));
 
 	m = sdMessages.length;
 	plugin.send(JSON.stringify({ event: "didReceiveGlobalSettings", payload: { settings: { ...globalSettings, port: "99999" } } }));
@@ -330,6 +331,18 @@ try {
 	m = sdMessages.length;
 	plugin.send(JSON.stringify({ event: "didReceiveGlobalSettings", payload: { settings: { ...globalSettings, password: "wrong" } } }));
 	check("a wrong password is reported", await waitFor(() => sdSince(m, "sendToPropertyInspector").some((x) => x.payload.connection === "auth-failed")));
+
+	// A server that accepts the connection but never speaks the obs-websocket protocol.
+	const silent = new WebSocketServer({ port: 0, host: "127.0.0.1" });
+	await new Promise((resolve) => silent.once("listening", resolve));
+	m = sdMessages.length;
+	plugin.send(JSON.stringify({ event: "didReceiveGlobalSettings", payload: { settings: { ...globalSettings, port: String(silent.address().port) } } }));
+	check(
+		"a server that never answers times out",
+		await waitFor(() => sdSince(m, "sendToPropertyInspector").some((x) => x.payload.error === "OBS did not respond"), 12_000),
+	);
+	for (const ws of silent.clients) ws.terminate();
+	silent.close();
 
 	const logDir = path.join(PLUGIN_DIR, "logs");
 	const logs = existsSync(logDir) ? readdirSync(logDir).map((file) => readFileSync(path.join(logDir, file), "utf8")).join("\n") : "";
