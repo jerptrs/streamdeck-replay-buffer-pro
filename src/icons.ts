@@ -16,6 +16,13 @@ export type SaveVariant = (typeof SAVE_VARIANTS)[number];
 export const TOGGLE_VARIANTS = ["on", "off", "starting", "stopping", "offline", "unavailable"] as const;
 export type ToggleVariant = (typeof TOGGLE_VARIANTS)[number];
 
+/**
+ * Faces shown while a saved clip is uploaded to chibisafe: progress in 10% steps, and "copied" once
+ * the link is on the clipboard. They look the same on every save key.
+ */
+export const UPLOAD_VARIANTS = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, "copied"] as const;
+export type UploadVariant = (typeof UPLOAD_VARIANTS)[number];
+
 const SIZE = 144;
 const CX = 72;
 const RING_CY = 58;
@@ -28,6 +35,7 @@ const MUTED_TEXT = "#8a91a3";
 const RED = "#ff3b47";
 const AMBER = "#ffb020";
 const GREEN = "#34d399";
+const BLUE = "#60a5fa";
 
 /** Accent colour per clip length, so the save keys are easy to tell apart at a glance. */
 const DURATION_ACCENT: Record<SaveDuration, string> = {
@@ -42,6 +50,11 @@ const DURATION_ACCENT: Record<SaveDuration, string> = {
 /** Key file name (without size suffix) for a save key face. */
 export function saveKeyName(duration: SaveDuration, variant: SaveVariant): string {
 	return `save-${duration}-${variant}`;
+}
+
+/** Key file name (without size suffix) for an upload face. */
+export function uploadKeyName(variant: UploadVariant): string {
+	return `upload-${variant}`;
 }
 
 /** Key file name (without size suffix) for a toggle key face. */
@@ -187,6 +200,39 @@ export function toggleKeySvg(variant: ToggleVariant): string {
 		case "unavailable":
 			return svg(background() + replayRing(CX, RING_CY, RING_R, MUTED, 8, true) + recordDot(MUTED, true) + label("DISABLED", MUTED_TEXT, 21));
 	}
+}
+
+/** Clockwise arc from 12 o'clock covering `fraction` of the ring. */
+function progressArc(fraction: number, stroke: string): string {
+	if (fraction <= 0) return "";
+	const [x1, y1] = polar(CX, RING_CY, RING_R, -90);
+	const [x2, y2] = polar(CX, RING_CY, RING_R, -90 + 360 * fraction);
+	const largeArc = fraction > 0.5 ? 1 : 0;
+	return `<path d="M ${fmt(x1)} ${fmt(y1)} A ${RING_R} ${RING_R} 0 ${largeArc} 1 ${fmt(x2)} ${fmt(y2)}" fill="none" stroke="${stroke}" stroke-width="8" stroke-linecap="round"/>`;
+}
+
+
+/** Two interlocking chain links. */
+function linkGlyph(cx: number, cy: number, stroke: string): string {
+	const link = (dx: number) =>
+		`<rect x="${cx + dx - 13}" y="${cy - 7}" width="26" height="14" rx="7" fill="none" stroke="${stroke}" stroke-width="5.5"/>`;
+	return `<g transform="rotate(-45 ${cx} ${cy})">${link(-8)}${link(8)}</g>`;
+}
+
+/** Key face shown on a save key while its clip is uploaded to chibisafe. */
+export function uploadKeySvg(variant: UploadVariant): string {
+	if (variant === "copied") {
+		return svg(
+			background(GREEN) +
+				`<circle cx="${CX}" cy="${RING_CY}" r="${RING_R}" fill="none" stroke="${GREEN}" stroke-width="8"/>` +
+				linkGlyph(CX, RING_CY, WHITE) +
+				label("LINK COPIED", GREEN, 18),
+		);
+	}
+
+	const ring = `<circle cx="${CX}" cy="${RING_CY}" r="${RING_R}" fill="none" stroke="#2c313d" stroke-width="8"/>` + progressArc(variant / 100, BLUE);
+	const percent = `<text x="${CX}" y="${RING_CY + 8}" text-anchor="middle" font-family="${FONT}" font-weight="bold" font-size="22" fill="${WHITE}">${variant}%</text>`;
+	return svg(background(BLUE) + ring + percent + label("UPLOADING", BLUE, 19));
 }
 
 /** Monochrome white icon for the Stream Deck action list (20×20 / 40×40). */

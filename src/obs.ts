@@ -29,7 +29,12 @@ type ObsStatus = {
 
 const DEFAULT_HOST = "127.0.0.1";
 const DEFAULT_PORT = 4455;
+/**
+ * While OBS isn't reachable, retries start after 5 seconds and double up to once a minute. Pressing a
+ * key still retries immediately, so a closed OBS costs one local connection attempt a minute at most.
+ */
 const RECONNECT_DELAY_MS = 5_000;
+const MAX_RECONNECT_DELAY_MS = 60_000;
 const AUTH_RETRY_DELAY_MS = 30_000;
 const SETTINGS_DEBOUNCE_MS = 500;
 
@@ -57,6 +62,8 @@ class ObsClient {
 	#started = false;
 	/** Incremented on every connect attempt so late results from an abandoned attempt are ignored. */
 	#attempt = 0;
+	/** Failed connection attempts in a row, for the reconnect backoff. */
+	#failures = 0;
 
 	readonly #statusListeners = new Set<(status: ObsStatus) => void>();
 	readonly #savedListeners = new Set<(path: string) => void>();
@@ -108,7 +115,11 @@ class ObsClient {
 		} else if (changed) {
 			// The property inspector saves on every keystroke; wait until typing settles.
 			clearTimeout(this.#settingsTimer);
-			this.#settingsTimer = setTimeout(() => void this.#connect(), SETTINGS_DEBOUNCE_MS);
+			this.#settingsTimer = setTimeout(() => {
+				// New settings deserve a quick retry schedule again.
+				this.#failures = 0;
+				void this.#connect();
+			}, SETTINGS_DEBOUNCE_MS);
 		}
 	}
 
@@ -190,6 +201,7 @@ class ObsClient {
 			}
 
 			logger.info(`Connected to obs-websocket ${obsWebSocketVersion} at ${url}`);
+			this.#failures = 0;
 			this.#update({ connection: "connected" });
 			await Promise.all([this.refreshReplayState(), this.detectReplayBufferPro()]);
 		} catch (error) {
@@ -201,7 +213,9 @@ class ObsClient {
 			const message = authFailed ? "Wrong or missing OBS WebSocket password" : describe(error);
 			logger.debug(`Connection to ${url} failed: ${message}`);
 			this.#update({ connection: authFailed ? "auth-failed" : "disconnected", replay: "unknown", error: message });
-			this.#scheduleReconnect(authFailed ? AUTH_RETRY_DELAY_MS : RECONNECT_DELAY_MS);
+			this.#failures++;
+			const backoff = Math.min(MAX_RECONNECT_DELAY_MS, RECONNECT_DELAY_MS * 2 ** (this.#failures - 1));
+			this.#scheduleReconnect(authFailed ? Math.max(AUTH_RETRY_DELAY_MS, backoff) : backoff);
 		}
 	}
 

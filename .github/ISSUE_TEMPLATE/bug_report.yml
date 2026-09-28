@@ -1,0 +1,77 @@
+name: Bug report
+description: Something in the plugin doesn't work as expected.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug! Please search the existing issues first.
+        Security problems don't belong here; please follow the [security policy](https://github.com/jerptrs/streamdeck-replay-buffer-pro/blob/main/SECURITY.md) instead.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Put the "Save Last 15 sec" key on the Stream Deck
+        2. Start the replay buffer
+        3. Press the key
+        4. ...
+    validations:
+      required: true
+
+  - type: input
+    id: plugin-version
+    attributes:
+      label: Plugin version
+      description: Shown in the Stream Deck app under Preferences → Plugins.
+      placeholder: "1.2.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Windows
+        - macOS
+    validations:
+      required: true
+
+  - type: input
+    id: versions
+    attributes:
+      label: Stream Deck, OBS and Replay Buffer Pro versions
+      placeholder: "Stream Deck 7.1, OBS 32.0, Replay Buffer Pro 1.7.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: chibisafe
+    attributes:
+      label: Are chibisafe uploads turned on?
+      options:
+        - "No"
+        - "Yes"
+    validations:
+      required: true
+
+  - type: textarea
+    id: log
+    attributes:
+      label: Plugin log
+      description: |
+        The relevant lines from the newest file in
+        `%APPDATA%\Elgato\StreamDeck\Plugins\com.replay-buffer-pro.obs.sdPlugin\logs` (Windows) or
+        `~/Library/Application Support/com.elgato.StreamDeck/Plugins/com.replay-buffer-pro.obs.sdPlugin/logs` (macOS).
+        The log never contains your OBS password or chibisafe API key, but remove anything else you'd rather not share, such as file paths or links.
+      render: text

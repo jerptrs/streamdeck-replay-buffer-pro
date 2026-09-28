@@ -99,6 +99,52 @@
         <sdpi-item>
             <div id="slot-detail" class="note"></div>
         </sdpi-item>
+
+        <sdpi-item label="chibisafe">
+            <sdpi-checkbox setting="upload" default="true" label="Upload clips from this key"></sdpi-checkbox>
+        </sdpi-item>
+
+        <sdpi-item label="Album">
+            <sdpi-select setting="album" datasource="getKeyAlbums" hot-reload show-refresh loading="Loading albums…"></sdpi-select>
+        </sdpi-item>
+
+        <sdpi-item>
+            <div id="upload-detail" class="note"></div>
+        </sdpi-item>
+    </div>
+
+    <div id="chibisafe-options" hidden>
+        <div class="heading">chibisafe uploads</div>
+
+        <sdpi-item label="Uploads">
+            <sdpi-checkbox setting="chibisafeEnabled" global label="Upload saved clips and copy the link"></sdpi-checkbox>
+        </sdpi-item>
+
+        <sdpi-item label="Server URL">
+            <sdpi-textfield setting="chibisafeUrl" global placeholder="https://chibisafe.example.com"></sdpi-textfield>
+        </sdpi-item>
+
+        <sdpi-item label="API key">
+            <sdpi-password setting="chibisafeApiKey" global></sdpi-password>
+        </sdpi-item>
+
+        <sdpi-item label="Album">
+            <sdpi-select setting="chibisafeAlbum" global datasource="getAlbums" hot-reload show-refresh loading="Loading albums…"></sdpi-select>
+        </sdpi-item>
+
+        <sdpi-item label="Status">
+            <div class="status"><span id="chibisafe-dot" class="dot"></span><span id="chibisafe-text"></span></div>
+        </sdpi-item>
+
+        <details class="help">
+            <summary>How to set up chibisafe</summary>
+            <ol>
+                <li>Enter your chibisafe server URL. In chibisafe open <b>Dashboard → Credentials</b> and copy your <b>API key</b> here.</li>
+                <li>Optional: pick an <b>Album</b> to collect your clips in (↻ reloads the list).</li>
+                <li>Tick <b>Upload saved clips and copy the link</b>. Each save key can opt out, or pick its own album, in its own settings.</li>
+            </ol>
+            <p>OBS must run on this computer, because the plugin uploads the clip from disk. MP4 clips play in the browser; MKV links usually download instead.</p>
+        </details>
     </div>
 
     <details class="help">
@@ -149,6 +195,34 @@
                 detail.textContent = status.slot.detail;
                 detail.className = "note" + (status.slot.ok ? "" : " bad");
             }
+
+            if (status.chibisafe) renderChibisafe(status.chibisafe);
+        }
+
+        function renderChibisafe(chibisafe) {
+            const remote = chibisafe.enabled && !chibisafe.obsIsLocal ? " Uploading needs OBS on this computer." : "";
+            const [tone, text] =
+                chibisafe.state === "unconfigured"
+                    ? chibisafe.enabled ? ["busy", "Enter the server URL and API key."] : ["", "Uploading is off."]
+                    : chibisafe.state === "checking"
+                      ? ["busy", chibisafe.detail]
+                      : chibisafe.state === "error"
+                        ? ["bad", chibisafe.detail]
+                        : chibisafe.enabled ? ["ok", chibisafe.detail] : ["", chibisafe.detail + " · uploading is off"];
+
+            document.getElementById("chibisafe-dot").className = "dot " + (remote ? "bad" : tone);
+            document.getElementById("chibisafe-text").textContent = text + remote;
+
+            const upload = document.getElementById("upload-detail");
+            const bad = chibisafe.enabled && (chibisafe.state === "error" || remote);
+            upload.className = "note" + (bad ? " bad" : "");
+            upload.textContent = !chibisafe.enabled
+                ? "Uploading is off for all keys; turn it on in the Replay Buffer On/Off key's settings."
+                : chibisafe.state === "unconfigured"
+                  ? "Finish the chibisafe setup in the Replay Buffer On/Off key's settings."
+                  : chibisafe.state === "error"
+                    ? "chibisafe: " + chibisafe.detail
+                    : "When ticked, clips are uploaded and the link is copied to the clipboard." + remote;
         }
 
         streamDeckClient.sendToPropertyInspector.subscribe(({ payload }) => {
@@ -157,6 +231,7 @@
 
         streamDeckClient.getConnectionInfo().then(({ actionInfo }) => {
             document.getElementById("save-options").hidden = !/\.save-\d+$/.test(actionInfo.action);
+            document.getElementById("chibisafe-options").hidden = !/\.toggle$/.test(actionInfo.action);
             streamDeckClient.send("sendToPlugin", { event: "getStatus" });
         });
     </script>

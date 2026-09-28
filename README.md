@@ -5,7 +5,8 @@
 
 A Stream Deck plugin for the [Replay Buffer Pro](https://github.com/JoshuaPotter/replay-buffer-pro) OBS plugin:
 turn OBS's replay buffer on and off, and save anything from the last 15 seconds to the last 30 minutes, each
-with a single key press.
+with a single key press. Optionally, saved clips are uploaded to your [chibisafe](https://github.com/chibisafe/chibisafe)
+server and the link is copied to your clipboard.
 
 | Action | What it does |
 | --- | --- |
@@ -20,7 +21,8 @@ with a single key press.
 ![Key faces](docs/key-preview.png)
 
 Top row: the toggle when on, off, starting, stopping, not connected to OBS, and with the replay buffer disabled in OBS.
-Other rows: each save key when ready, when the replay buffer is off, when not connected, while saving, and once saved.
+Middle rows: each save key when ready, when the replay buffer is off, when not connected, while saving, and once saved.
+Bottom row: a save key while its clip uploads to chibisafe, and once the link is copied.
 
 ## Requirements
 
@@ -28,18 +30,23 @@ Other rows: each save key when ready, when the replay buffer is off, when not co
 - OBS Studio 28 or newer (its WebSocket server is built in)
 - The [Replay Buffer Pro](https://github.com/JoshuaPotter/replay-buffer-pro) OBS plugin, version 1.4.0 or newer,
   with the replay buffer enabled in OBS (Settings → Output → Replay Buffer)
+- Optional: a [chibisafe](https://github.com/chibisafe/chibisafe) server and API key, to upload clips
 
 ## Install
 
-1. Download `com.replay-buffer-pro.obs.streamDeckPlugin` from the
+1. Install the Replay Buffer Pro OBS plugin (version 1.4.0 or newer) by following its
+   [installation steps](https://github.com/JoshuaPotter/replay-buffer-pro#installation), and turn on the replay
+   buffer in OBS (Settings → Output → Replay Buffer).
+2. Download `com.replay-buffer-pro.obs.streamDeckPlugin` from the
    [latest release](https://github.com/jerptrs/streamdeck-replay-buffer-pro/releases/latest) and double-click it.
-2. In OBS open **Tools → WebSocket Server Settings**, tick **Enable WebSocket server**, then click
+3. In OBS open **Tools → WebSocket Server Settings**, tick **Enable WebSocket server**, then click
    **Show Connect Info**.
-3. Drag any of the actions from the **OBS Replay Buffer Pro** category onto your Stream Deck. In its settings
+4. Drag any of the actions from the **OBS Replay Buffer Pro** category onto your Stream Deck. In its settings
    panel, enter the host (`127.0.0.1` if OBS runs on the same PC), port (default `4455`) and password. These
    are shared by all keys of this plugin.
 
 To update, download the new release and double-click it. Keys already on your Stream Deck keep their settings.
+The [changelog](CHANGELOG.md) lists what changed in each version.
 
 ## How it works
 
@@ -69,65 +76,59 @@ triangle instead of Replay Buffer Pro popping up a dialog in OBS. The reason is 
 In a multi-action, set the on/off key to its **On** or **Off** state to always start or stop the replay buffer
 instead of toggling it.
 
+## Upload to chibisafe
+
+Saved clips can be uploaded to a [chibisafe](https://github.com/chibisafe/chibisafe) server, with the link copied
+to your clipboard, ready to paste.
+
+1. In chibisafe, open **Dashboard → Credentials** and copy your API key.
+2. Open the settings of the **Replay Buffer On/Off** key. Under **chibisafe uploads**, enter the server URL and API
+   key. The status line confirms the connection, even before you switch uploading on.
+3. Optional: pick an **Album** to collect your clips in by default. The list loads from chibisafe; ↻ reloads it.
+4. Tick **Upload saved clips and copy the link**.
+
+Uploading is on for every save key once it's on globally. Each save key's settings can change that:
+
+- Untick **Upload clips from this key** to keep a key from uploading, for example the 30 min key.
+- Pick an **Album** to send that key's clips somewhere else. **Default** uses the album chosen on the On/Off key,
+  and **No album** uploads without one.
+
+After a save, the key shows **UPLOADING** with its progress, then **LINK COPIED**. The plugin waits for Replay
+Buffer Pro's trimmed clip (`<name>_trimmed.<ext>`) and uploads only that. Only clips saved with a Stream Deck
+key are uploaded; saves made another way, such as with OBS's own Save Replay hotkey, aren't. If the trim fails,
+the clip is over the size limit or the server can't be reached, nothing is uploaded and the key shows the
+warning triangle; the plugin's log says why.
+
+- OBS must run on the same computer as Stream Deck, because the plugin uploads the clip from disk.
+- chibisafe limits the file size (1 GB by default, set by the server's admin). Clips over the limit aren't
+  uploaded; long clips at high bitrates easily exceed it.
+- MP4 clips play in the browser. MKV links usually download instead, so record in MP4 or Hybrid MP4
+  (OBS → Settings → Output → Recording Format) if you share links.
+- The server URL must use HTTPS, unless the server is on your local network.
+
 ## Security and privacy
 
-- The plugin only connects to the OBS WebSocket server you configure. It has no telemetry and makes no
-  other network requests.
+- The plugin only connects to the OBS WebSocket server you configure and, once you enter a chibisafe server
+  URL and API key, that server (to check the connection, list albums and upload). It has no telemetry and
+  makes no other network requests.
 - The OBS password is stored in Stream Deck's plugin settings and is never written to the log. OBS
   authentication is challenge-response, so the password itself never crosses the network.
 - OBS's WebSocket server doesn't support encryption, so the rest of the traffic is unencrypted. If OBS runs
   on another computer, keep it on a network you trust.
-- The only file the plugin reads outside its own folder is Replay Buffer Pro's `save_button_settings.json`.
+- The chibisafe API key is stored the same way and never written to the log. It's only sent to the server you
+  configure, over HTTPS unless that server is on your local network, and requests carrying it never follow
+  redirects to another address. With S3 storage, the file itself goes to the storage URL chibisafe hands out,
+  without the API key.
+- Outside its own folder, the plugin reads only Replay Buffer Pro's `save_button_settings.json` and, when
+  uploading, the trimmed clips in your recordings folder. It only ever uploads video files.
 
-## Development
-
-Requires Node.js 24 or newer.
-
-```bash
-npm install
-npm run build      # bundle src/ into com.replay-buffer-pro.obs.sdPlugin/bin
-npm run watch      # rebuild on change and restart the plugin in Stream Deck
-npm test           # build, then run the end-to-end test against a fake Stream Deck and OBS
-npm run typecheck
-npm run validate   # check the manifest and assets with the Stream Deck CLI
-npm run icons      # re-render the key images and docs/key-preview.png from src/icons.ts
-npm run pack       # build + create dist/com.replay-buffer-pro.obs.streamDeckPlugin
-```
-
-To try your build in the Stream Deck app, link the plugin folder once with
-`npx streamdeck link com.replay-buffer-pro.obs.sdPlugin`.
-
-| Path | Purpose |
-| --- | --- |
-| `src/plugin.ts` | Entry point: registers the actions and wires up settings and the settings panel. |
-| `src/obs.ts` | Keeps the OBS connection alive, reconnects and tracks the replay buffer state. |
-| `src/obs-websocket.ts` | Minimal obs-websocket v5 client on top of Node's built-in WebSocket. |
-| `src/replay-buffer-pro.ts` | Maps a clip length to a Replay Buffer Pro hotkey. |
-| `src/actions/` | The toggle and save actions. |
-| `src/icons.ts` | SVG artwork for all images, rendered to PNG by `scripts/render-icons.ts`. |
-| `src/key-images.ts` | Loads the rendered key images for the plugin at runtime. |
-| `com.replay-buffer-pro.obs.sdPlugin/ui/settings.html` | Settings panel (property inspector). |
-| `test/e2e.mjs` | End-to-end test. |
+Found a security problem? Please report it privately as described in the [security policy](SECURITY.md).
 
 ## Contributing
 
-Bug reports, ideas and pull requests are welcome.
-
-- **Bugs and feature requests:** [open an issue](https://github.com/jerptrs/streamdeck-replay-buffer-pro/issues).
-  For bugs, include your Stream Deck, OBS and Replay Buffer Pro versions, and the plugin log
-  (see [How it works](#how-it-works) for where to find it).
-- **Pull requests:** fork the repo and create a branch; [Development](#development) covers the setup. Before
-  opening the pull request, run `npm run typecheck`, `npm run validate` and `npm test`. CI runs the same checks.
-  Keep each pull request to one change, and follow the style of the surrounding code.
-- **New clip lengths:** add the length to `SAVE_DURATIONS` and `DURATION_ACCENT` in `src/icons.ts`, add a matching
-  action to `com.replay-buffer-pro.obs.sdPlugin/manifest.json`, then run `npm run icons`.
-- **Artwork:** key images are drawn in `src/icons.ts`. After changing them, run `npm run icons` and commit the
-  updated PNGs. The labels are designed for Arial Bold, which the script picks up on Windows, macOS and WSL.
-- **Security issues:** please don't open a public issue. Report them privately with
-  [Report a vulnerability](https://github.com/jerptrs/streamdeck-replay-buffer-pro/security/advisories/new)
-  on the repo's Security tab.
-
-By contributing, you agree that your contributions are licensed under the [MIT License](LICENSE).
+Bug reports, ideas and pull requests are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) covers how to report issues,
+set up the project, run the tests and open a pull request. Everyone taking part is expected to follow the
+[Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## Third-party code
 

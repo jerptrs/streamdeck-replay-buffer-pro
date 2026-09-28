@@ -1,14 +1,15 @@
 {
     "name": "streamdeck-replay-buffer-pro",
-    "version": "1.1.0",
+    "version": "1.2.0",
     "private": true,
-    "description": "Stream Deck plugin for the Replay Buffer Pro OBS plugin: toggle the replay buffer and save the last 15 sec, 30 sec, 60 sec, 5 min, 15 min or 30 min.",
+    "description": "Stream Deck plugin for the Replay Buffer Pro OBS plugin: toggle the replay buffer and save the last 15 sec, 30 sec, 60 sec, 5 min, 15 min or 30 min, and optionally upload clips to chibisafe.",
     "keywords": [
         "stream-deck",
         "streamdeck-plugin",
         "obs",
         "obs-studio",
-        "replay-buffer"
+        "replay-buffer",
+        "chibisafe"
     ],
     "author": "jerptrs",
     "license": "MIT",

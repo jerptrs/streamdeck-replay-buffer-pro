@@ -20,6 +20,9 @@ import {
 	TOGGLE_VARIANTS,
 	toggleKeyName,
 	toggleKeySvg,
+	UPLOAD_VARIANTS,
+	uploadKeyName,
+	uploadKeySvg,
 } from "../src/icons.ts";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -60,6 +63,7 @@ const keyFaces: { name: string; svg: string }[] = [
 	...SAVE_DURATIONS.flatMap((duration) =>
 		SAVE_VARIANTS.map((variant) => ({ name: saveKeyName(duration, variant), svg: saveKeySvg(duration, variant) })),
 	),
+	...UPLOAD_VARIANTS.map((variant) => ({ name: uploadKeyName(variant), svg: uploadKeySvg(variant) })),
 ];
 
 for (const { name, svg } of keyFaces) {
@@ -77,16 +81,17 @@ const previewIndex = process.argv.indexOf("--preview");
 if (previewIndex !== -1 && process.argv[previewIndex + 1]) {
 	const cell = 144;
 	const gap = 16;
-	const columns = SAVE_VARIANTS.length > TOGGLE_VARIANTS.length ? SAVE_VARIANTS.length : TOGGLE_VARIANTS.length;
-	const rows = 1 + SAVE_DURATIONS.length;
-	const width = columns * (cell + gap) + gap;
-	const height = rows * (cell + gap) + gap;
-	const toDataUrl = (svg: string) => `data:image/png;base64,${render(svg, cell).toString("base64")}`;
-
-	const placed = [
+	const rows = [
 		TOGGLE_VARIANTS.map((variant) => toggleKeySvg(variant)),
 		...SAVE_DURATIONS.map((duration) => SAVE_VARIANTS.map((variant) => saveKeySvg(duration, variant))),
-	].flatMap((row, r) =>
+		([0, 30, 60, 90, "copied"] as const).map((variant) => uploadKeySvg(variant)),
+	];
+	const columns = Math.max(...rows.map((row) => row.length));
+	const width = columns * (cell + gap) + gap;
+	const height = rows.length * (cell + gap) + gap;
+	const toDataUrl = (svg: string) => `data:image/png;base64,${render(svg, cell).toString("base64")}`;
+
+	const placed = rows.flatMap((row, r) =>
 		row.map(
 			(svg, c) =>
 				`<g transform="translate(${gap + c * (cell + gap)} ${gap + r * (cell + gap)})">` +

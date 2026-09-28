@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/jerptrs/streamdeck-replay-buffer-pro/security/advisories/new
+    about: Please report security issues privately, not as a public issue.
+  - name: Problem with Replay Buffer Pro itself
+    url: https://github.com/JoshuaPotter/replay-buffer-pro/issues
+    about: Issues with the OBS plugin (saving, trimming, its dock) belong in its own repository.
