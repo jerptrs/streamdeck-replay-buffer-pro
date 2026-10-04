@@ -81,8 +81,9 @@ When OBS isn't running, the On/Off key shows **NO OBS**: press it to open OBS. I
 has finished starting and shows its window (also when you open OBS yourself), then works as usual. The plugin
 finds OBS installed normally or through Steam (on a Mac, OBS.app in Applications). For anything else, such as a
 portable OBS, enter the path to `obs64.exe` (or `OBS.app`) under **OBS app** in the On/Off key's settings. This
-only works when OBS runs on the same computer. If OBS is already running but the plugin can't connect, for example
-because its WebSocket server is off, the key shows the warning triangle instead of opening OBS a second time.
+only works when OBS is installed on the same computer as Stream Deck. If OBS is already running but the plugin
+can't connect, for example because its WebSocket server is off, the key shows the warning triangle instead of
+opening OBS a second time.
 
 In a multi-action, set the on/off key to its **On** or **Off** state to always start or stop the replay buffer
 instead of toggling it.

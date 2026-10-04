@@ -11,12 +11,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
-- Pressing the On/Off key while it shows **NO OBS** opens OBS, when OBS runs on this computer and isn't running
-  yet. The plugin then tries to connect every 2 seconds for up to a minute. Standard and Steam installs are found
+- Pressing the On/Off key while it shows **NO OBS** starts OBS. This works when OBS is installed on the same
+  computer as Stream Deck, not when the plugin connects to OBS on another computer. The plugin then tries to
+  connect every 2 seconds for up to a minute. Standard and Steam installs are found
   by themselves; set **OBS app** in the key's settings for others, such as a portable OBS. If OBS is already
   running but can't be reached, the key shows the warning triangle and the log says what to check.
-- The On/Off key shows **STARTING OBS** while OBS starts up, however it was opened, until OBS has finished
-  loading and shows its window. Save keys pressed meanwhile show the warning triangle.
+- While OBS is starting up, the On/Off key shows **STARTING OBS** until OBS has finished loading and its window
+  is open. This also happens when you start OBS yourself, not only from the key. Save keys pressed during that
+  time show the warning triangle.
 
 ### Fixed
 

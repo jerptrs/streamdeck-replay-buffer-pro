@@ -78,7 +78,7 @@ export class ToggleReplayBuffer extends SingletonAction<ToggleSettings> {
 		}
 	}
 
-	/** "NO OBS" was pressed: opens OBS when it runs on this computer and isn't running yet. */
+	/** "NO OBS" was pressed: starts OBS when it's installed on this computer and isn't running yet. */
 	async #pressedWithoutObs(key: KeyDownEvent<ToggleSettings>["action"]): Promise<void> {
 		// OBS is already on its way.
 		if (this.#opening || this.#checking || obs.status.connection === "loading") {
