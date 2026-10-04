@@ -22,7 +22,8 @@ export const CUSTOM_DEFAULT_ACCENT = "#2dd4bf";
 export const SAVE_VARIANTS = ["ready", "inactive", "offline", "saving", "saved"] as const;
 export type SaveVariant = (typeof SAVE_VARIANTS)[number];
 
-export const TOGGLE_VARIANTS = ["on", "off", "starting", "stopping", "offline", "unavailable"] as const;
+/** "starting"/"stopping" are the replay buffer's; "obs-starting" is OBS itself starting up. */
+export const TOGGLE_VARIANTS = ["on", "off", "starting", "stopping", "offline", "obs-starting", "unavailable"] as const;
 export type ToggleVariant = (typeof TOGGLE_VARIANTS)[number];
 
 /**
@@ -226,6 +227,8 @@ export function toggleKeySvg(variant: ToggleVariant): string {
 			return svg(background(AMBER) + replayRing(CX, RING_CY, RING_R, AMBER, 8) + dotsGlyph(CX, RING_CY, WHITE) + label("STOPPING", AMBER, 21));
 		case "offline":
 			return svg(background() + replayRing(CX, RING_CY, RING_R, MUTED, 8, true) + recordDot(MUTED, true) + label("NO OBS", MUTED_TEXT, 23));
+		case "obs-starting":
+			return svg(background(AMBER) + replayRing(CX, RING_CY, RING_R, AMBER, 8, true) + dotsGlyph(CX, RING_CY, WHITE) + label("STARTING OBS", AMBER, 16));
 		case "unavailable":
 			return svg(background() + replayRing(CX, RING_CY, RING_R, MUTED, 8, true) + recordDot(MUTED, true) + label("DISABLED", MUTED_TEXT, 21));
 	}

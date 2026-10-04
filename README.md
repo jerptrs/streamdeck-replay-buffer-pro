@@ -10,7 +10,7 @@ server and the link is copied to your clipboard.
 
 | Action | What it does |
 | --- | --- |
-| **Replay Buffer On/Off** | One key that starts or stops the OBS replay buffer and shows whether it's running. |
+| **Replay Buffer On/Off** | One key that starts or stops the OBS replay buffer and shows whether it's running. Opens OBS when it isn't running. |
 | **Save Last 15 sec** | Saves the last 15 seconds. |
 | **Save Last 30 sec** | Saves the last 30 seconds. |
 | **Save Last 60 sec** | Saves the last 60 seconds. |
@@ -21,7 +21,8 @@ server and the link is copied to your clipboard.
 
 ![Key faces](docs/key-preview.png)
 
-Top row: the toggle when on, off, starting, stopping, not connected to OBS, and with the replay buffer disabled in OBS.
+Top row: the toggle when on, off, starting, stopping, not connected to OBS, while OBS starts, and with the replay
+buffer disabled in OBS.
 Middle rows: each save key when ready, when the replay buffer is off, when not connected, while saving, and once saved.
 Next row: custom length keys in different lengths and colours, and one still waiting for a valid length.
 Bottom row: a save key while its clip uploads to chibisafe, and once the link is copied.
@@ -76,6 +77,13 @@ mode), it's in the **Recording** tab's encoder settings, or in the **Streaming**
 encoder. If you stream, keep 2 s, which streaming platforms expect. Stop the replay buffer before changing it, as
 OBS locks these settings while it runs. OBS's log shows how far each cut was moved (`drift`).
 
+When OBS isn't running, the On/Off key shows **NO OBS**: press it to open OBS. It shows **STARTING OBS** until OBS
+has finished starting and shows its window (also when you open OBS yourself), then works as usual. The plugin
+finds OBS installed normally or through Steam (on a Mac, OBS.app in Applications). For anything else, such as a
+portable OBS, enter the path to `obs64.exe` (or `OBS.app`) under **OBS app** in the On/Off key's settings. This
+only works when OBS runs on the same computer. If OBS is already running but the plugin can't connect, for example
+because its WebSocket server is off, the key shows the warning triangle instead of opening OBS a second time.
+
 In a multi-action, set the on/off key to its **On** or **Off** state to always start or stop the replay buffer
 instead of toggling it.
 
@@ -124,6 +132,9 @@ warning triangle; the plugin's log says why.
   without the API key.
 - Outside its own folder, the plugin only reads the trimmed clips in your recordings folder, and only when
   uploading. It only ever uploads video files.
+- The only program the plugin starts is OBS (the install it finds, or the **OBS app** you set), only when you press
+  the On/Off key while it shows NO OBS, and without any arguments. To find OBS and check whether it's running, it
+  uses the system's `reg` and `tasklist` on Windows, or `pgrep` on a Mac; for uploads, the clipboard tool.
 
 Found a security problem? Please report it privately as described in the [security policy](SECURITY.md).
 

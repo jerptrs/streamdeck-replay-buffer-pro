@@ -81,6 +81,16 @@
         <div class="status"><span id="status-dot" class="dot"></span><span id="status-text">Waiting for plugin…</span></div>
     </sdpi-item>
 
+    <div id="obs-app-options" hidden>
+        <sdpi-item label="OBS app">
+            <sdpi-textfield setting="obsPath" global placeholder="Found automatically"></sdpi-textfield>
+        </sdpi-item>
+
+        <sdpi-item>
+            <div id="obs-app-detail" class="note"></div>
+        </sdpi-item>
+    </div>
+
     <div id="custom-options" hidden>
         <div class="heading">Clip length</div>
 
@@ -163,6 +173,7 @@
             <li>Click <b>Show Connect Info</b> and copy the port and password here.</li>
         </ol>
         <p>No OBS hotkeys are needed: the keys ask Replay Buffer Pro to save directly. A key longer than your replay buffer saves the whole buffer.</p>
+        <p>When OBS isn't running, the On/Off key shows <b>NO OBS</b>; pressing it opens OBS. Set <b>OBS app</b> only if OBS isn't found by itself, e.g. a portable install: the path to obs64.exe, or OBS.app on a Mac.</p>
     </details>
 
     <script>
@@ -170,6 +181,7 @@
 
         const CONNECTION_TEXT = {
             connecting: ["busy", "Connecting to OBS…"],
+            loading: ["busy", "OBS is starting…"],
             disconnected: ["bad", "Not connected. Is OBS running with the WebSocket server enabled?"],
             "auth-failed": ["bad", "OBS rejected the password."],
         };
@@ -200,6 +212,12 @@
                 const [tone, message] = CONNECTION_TEXT[status.connection] ?? ["bad", status.connection];
                 dot.className = "dot " + tone;
                 text.textContent = message;
+            }
+
+            const obsAppDetail = document.getElementById("obs-app-detail");
+            if (status.obsApp) {
+                obsAppDetail.textContent = status.obsApp.detail;
+                obsAppDetail.className = "note" + (status.obsApp.ok ? "" : " bad");
             }
 
             const lengthDetail = document.getElementById("length-detail");
@@ -242,6 +260,7 @@
         });
 
         streamDeckClient.getConnectionInfo().then(({ actionInfo }) => {
+            document.getElementById("obs-app-options").hidden = !/\.toggle$/.test(actionInfo.action);
             document.getElementById("custom-options").hidden = !/\.save-custom$/.test(actionInfo.action);
             document.getElementById("save-options").hidden = !/\.save-(\d+|custom)$/.test(actionInfo.action);
             document.getElementById("chibisafe-options").hidden = !/\.toggle$/.test(actionInfo.action);

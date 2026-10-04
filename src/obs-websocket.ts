@@ -7,6 +7,7 @@ import { createHash } from "node:crypto";
 
 /** Requests this plugin sends, with their request and response data. */
 type Requests = {
+	GetVersion: [undefined, { obsVersion: string; obsWebSocketVersion: string }];
 	GetReplayBufferStatus: [undefined, { outputActive: boolean }];
 	ToggleReplayBuffer: [undefined, { outputActive: boolean }];
 	StartReplayBuffer: [undefined, undefined];

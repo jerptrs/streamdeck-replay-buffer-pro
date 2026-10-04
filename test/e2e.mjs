@@ -39,11 +39,13 @@ function check(name, passed, detail = "") {
 // --------------------------------------------------------------------------- fake OBS
 
 /**
+ * ready: false while OBS is still starting; like obs-websocket, it then accepts connections but answers
+ * every request with "not ready".
  * replayBufferPro: "1.8.0" (has SaveClip), "1.7.0" (only the save button hotkeys) or null (not loaded).
  * bufferLength: the replay buffer length in seconds. saveRefused: Replay Buffer Pro refuses saves (recording paused).
  * trim: "ok", "fail" (partial file deleted after a while) or "fail-fast" (deleted before any poll could see it).
  */
-const obsState = { replayActive: false, bufferLength: 300, replayBufferPro: "1.8.0", saveRefused: false, clipSize: 2_500, trim: "ok", foreignSaveFirst: false };
+const obsState = { ready: true, replayActive: false, bufferLength: 300, replayBufferPro: "1.8.0", saveRefused: false, clipSize: 2_500, trim: "ok", foreignSaveFirst: false };
 const obsRequests = [];
 const obsClients = new Set();
 let obsServer;
@@ -79,7 +81,10 @@ async function startObs() {
 			const fail = (code, comment) =>
 				ws.send(JSON.stringify({ op: 7, d: { requestType, requestId, requestStatus: { result: false, code, comment } } }));
 
+			if (!obsState.ready) return fail(207, "OBS is not ready to perform the request.");
 			switch (requestType) {
+				case "GetVersion":
+					return ok({ obsVersion: "32.2.0", obsWebSocketVersion: "5.6.0" });
 				case "GetReplayBufferStatus":
 					return ok({ outputActive: obsState.replayActive });
 				case "GetHotkeyList": {
@@ -296,6 +301,20 @@ for (const tool of ["xclip", "pbcopy"]) {
 }
 const clipboard = () => (existsSync(clipboardFile) ? readFileSync(clipboardFile, "utf8") : "");
 
+// Stand-ins for OBS itself and the process check, for opening OBS from the On/Off key. The fake OBS
+// notes how it was started; pgrep reports OBS as running while the marker file exists.
+const obsLaunchesFile = path.join(tempHome, "obs-launches.txt");
+const obsRunningFile = path.join(tempHome, "obs-running");
+const portableObs = path.join(tempHome, "portable", "obs-portable");
+mkdirSync(path.dirname(portableObs));
+for (const file of [path.join(fakeBin, "obs"), portableObs]) {
+	writeFileSync(file, '#!/bin/sh\necho "$0" >> "$FAKE_OBS_LAUNCHES"\n');
+	chmodSync(file, 0o755);
+}
+writeFileSync(path.join(fakeBin, "pgrep"), '#!/bin/sh\n[ -e "$FAKE_OBS_RUNNING" ]\n');
+chmodSync(path.join(fakeBin, "pgrep"), 0o755);
+const obsLaunches = () => (existsSync(obsLaunchesFile) ? readFileSync(obsLaunchesFile, "utf8").split("\n").filter(Boolean) : []);
+
 // --------------------------------------------------------------------------- fake chibisafe
 
 const chibi = {
@@ -408,6 +427,8 @@ const child = spawn(
 			...process.env,
 			PATH: `${fakeBin}${path.delimiter}${process.env.PATH}`,
 			FAKE_CLIPBOARD: clipboardFile,
+			FAKE_OBS_LAUNCHES: obsLaunchesFile,
+			FAKE_OBS_RUNNING: obsRunningFile,
 		}, stdio: ["ignore", "pipe", "pipe"] },
 );
 let pluginOutput = "";
@@ -781,6 +802,61 @@ try {
 	await startObs();
 	// The plugin retries every 5 seconds.
 	check("reconnects when OBS comes back", await faceBecomes("toggle", "toggle-on", 15_000), face("toggle"));
+
+	// ------------------------------------------------------------------- opening OBS from the On/Off key
+
+	const setGlobal = (settings) => plugin.send(JSON.stringify({ event: "didReceiveGlobalSettings", payload: { settings: { ...globalSettings, ...settings } } }));
+	let obsApp = (await panelStatus("toggle"))?.obsApp;
+	check("settings panel shows which OBS the On/Off key opens", obsApp?.ok === true && obsApp.detail.includes(path.join(fakeBin, "obs")), obsApp?.detail);
+
+	await stopObs();
+	await faceBecomes("toggle", "toggle-offline");
+
+	// OBS runs, but its WebSocket server can't be reached (e.g. it's switched off): don't open OBS again.
+	writeFileSync(obsRunningFile, "");
+	m = sdMessages.length;
+	send("keyDown", "toggle");
+	check("NO OBS while OBS runs: alert", await waitFor(() => sdSince(m, "showAlert", "toggle").length > 0));
+	check("NO OBS while OBS runs: OBS isn't opened again", obsLaunches().length === 0, obsLaunches().join(", "));
+	check("NO OBS while OBS runs: the log says to check the WebSocket server", await waitFor(() => logText().includes("its WebSocket server can't be reached")));
+	rmSync(obsRunningFile);
+
+	setGlobal({ obsPath: path.join(tempHome, "missing", "obs") });
+	await waitFor(() => sdSince(m, "sendToPropertyInspector").some((x) => x.payload.obsApp?.ok === false));
+	obsApp = (await panelStatus("toggle"))?.obsApp;
+	check("a wrong OBS app path is reported", obsApp?.ok === false && /doesn't exist/.test(obsApp.detail), obsApp?.detail);
+
+	// OBS is closed: NO OBS opens it, here from the OBS app setting.
+	setGlobal({ obsPath: portableObs });
+	await sleep(300);
+	m = sdMessages.length;
+	send("keyDown", "toggle");
+	check("pressing NO OBS opens OBS", await waitFor(() => obsLaunches().includes(portableObs)), obsLaunches().join(", "));
+	check("toggle shows STARTING OBS", await faceBecomes("toggle", "toggle-obs-starting"), face("toggle"));
+	send("keyDown", "toggle");
+	await sleep(1_000);
+	check("pressing again while OBS starts doesn't open it twice", obsLaunches().length === 1, obsLaunches().join(", "));
+
+	// OBS accepts the connection before it has finished starting; the keys wait until it's ready.
+	obsState.ready = false;
+	o = obsRequests.length;
+	await startObs();
+	check("connects within seconds once OBS's WebSocket server is up", await waitFor(() => obsRequests.slice(o).some((r) => r.requestType === "GetVersion")));
+	await sleep(1_500);
+	check("toggle stays on STARTING OBS while OBS is still starting", face("toggle") === "toggle-obs-starting", face("toggle"));
+	check("settings panel says OBS is starting", (await panelStatus("toggle"))?.connection === "loading");
+	const saveStart = sdMessages.length;
+	send("keyDown", "save15");
+	check("save while OBS is still starting shows an alert", await waitFor(() => sdSince(saveStart, "showAlert", "save15").length > 0));
+	check("the log says OBS is still starting", await waitFor(() => logText().includes("Save 15 sec: OBS is still starting")));
+	const ready = Date.now();
+	obsState.ready = true;
+	check("toggle shows the replay buffer state once OBS is ready", await faceBecomes("toggle", "toggle-on", 3_000), `${Date.now() - ready} ms`);
+	check(
+		"toggle goes straight from STARTING OBS to ON, without DISABLED or OFF in between",
+		facesSince(m, "toggle").join(" → ") === "toggle-obs-starting → toggle-on",
+		facesSince(m, "toggle").join(" → "),
+	);
 
 	m = sdMessages.length;
 	plugin.send(JSON.stringify({ event: "didReceiveGlobalSettings", payload: { settings: { ...globalSettings, port: "99999" } } }));

@@ -18,9 +18,12 @@ export type ObsSettings = {
 	host?: string;
 	port?: string;
 	password?: string;
+	/** OBS to open from the On/Off key when it isn't running; empty finds a standard install. */
+	obsPath?: string;
 };
 
-type ConnectionState = "connecting" | "connected" | "disconnected" | "auth-failed";
+/** "loading": connected, but OBS is still starting and doesn't answer requests yet. */
+type ConnectionState = "connecting" | "loading" | "connected" | "disconnected" | "auth-failed";
 
 /** Replay buffer output state; "unavailable" means the replay buffer is disabled in OBS's output settings. */
 type ReplayState = "unknown" | "stopped" | "starting" | "started" | "stopping" | "unavailable";
@@ -44,9 +47,16 @@ const RECONNECT_DELAY_MS = 5_000;
 const MAX_RECONNECT_DELAY_MS = 60_000;
 const AUTH_RETRY_DELAY_MS = 30_000;
 const SETTINGS_DEBOUNCE_MS = 500;
+/** After OBS is opened from the On/Off key, retry this often for this long, to connect as soon as it's up. */
+const OPENING_RETRY_DELAY_MS = 2_000;
+const OPENING_WAIT_MS = 60_000;
 
 /** obs-websocket close code sent when the password is wrong or missing. */
 const CLOSE_AUTHENTICATION_FAILED = 4009;
+/** obs-websocket's request status while OBS is still starting, or switching scene collections. */
+const NOT_READY = 207;
+/** How often to ask whether OBS has finished starting. */
+const READY_POLL_MS = 1_000;
 
 const OUTPUT_STATES: Record<string, ReplayState> = {
 	OBS_WEBSOCKET_OUTPUT_STARTING: "starting",
@@ -62,7 +72,10 @@ const OUTPUT_STATES: Record<string, ReplayState> = {
 class ObsClient {
 	readonly socket = new ObsWebSocket();
 
-	#settings: Required<ObsSettings> = { host: DEFAULT_HOST, port: String(DEFAULT_PORT), password: "" };
+	#settings: Required<Omit<ObsSettings, "obsPath">> = { host: DEFAULT_HOST, port: String(DEFAULT_PORT), password: "" };
+	#obsPath = "";
+	/** Until when OBS is expected to come up, after the On/Off key opened it. */
+	#openingUntil = 0;
 	#status: ObsStatus = { connection: "disconnected", replay: "unknown", replayBufferPro: "unknown" };
 	#reconnectTimer: NodeJS.Timeout | undefined;
 	#settingsTimer: NodeJS.Timeout | undefined;
@@ -97,6 +110,11 @@ class ObsClient {
 		return Object.values(os.networkInterfaces()).some((addresses) => addresses?.some((address) => address.address.toLowerCase() === host));
 	}
 
+	/** The "OBS app" setting: what the On/Off key opens when OBS isn't running. */
+	get obsPath(): string {
+		return this.#obsPath;
+	}
+
 	onStatusChange(listener: (status: ObsStatus) => void): void {
 		this.#statusListeners.add(listener);
 	}
@@ -107,7 +125,8 @@ class ObsClient {
 
 	/** Applies new connection settings, reconnecting if they changed. */
 	configure(settings: ObsSettings): void {
-		const next: Required<ObsSettings> = {
+		this.#obsPath = settings.obsPath?.trim() ?? "";
+		const next: Required<Omit<ObsSettings, "obsPath">> = {
 			host: settings.host?.trim() || DEFAULT_HOST,
 			port: String(settings.port ?? "").trim() || String(DEFAULT_PORT),
 			password: settings.password ?? "",
@@ -137,9 +156,16 @@ class ObsClient {
 		}
 	}
 
+	/** OBS was just opened: retry every 2 seconds for a minute instead of backing off. */
+	expectOpening(): void {
+		this.#openingUntil = Date.now() + OPENING_WAIT_MS;
+		this.#failures = 0;
+		this.retryNow();
+	}
+
 	/** Re-reads the replay buffer state from OBS. */
 	async refreshReplayState(): Promise<void> {
-		if (!this.connected) {
+		if (!this.socket.identified) {
 			return;
 		}
 
@@ -147,6 +173,10 @@ class ObsClient {
 			const { outputActive } = await this.socket.call("GetReplayBufferStatus");
 			this.#update({ replay: outputActive ? "started" : "stopped" });
 		} catch (error) {
+			// While OBS switches scene collections it answers "not ready"; the state it had still holds.
+			if (error instanceof ObsError && error.code === NOT_READY) {
+				return;
+			}
 			// obs-websocket refuses the request when the replay buffer isn't enabled in Settings → Output.
 			logger.warn(`Replay buffer unavailable: ${describe(error)}`);
 			this.#update({ replay: "unavailable" });
@@ -207,8 +237,14 @@ class ObsClient {
 
 			logger.info(`Connected to obs-websocket ${obsWebSocketVersion} at ${url}`);
 			this.#failures = 0;
-			this.#update({ connection: "connected" });
+			this.#openingUntil = 0;
+			await this.#waitUntilReady(attempt);
+			// Read the state first, so the keys go straight to it instead of blinking through OFF.
 			await Promise.all([this.refreshReplayState(), this.checkReplayBufferPro()]);
+			if (attempt !== this.#attempt || !this.socket.identified) {
+				return;
+			}
+			this.#update({ connection: "connected" });
 		} catch (error) {
 			if (attempt !== this.#attempt) {
 				return;
@@ -220,7 +256,28 @@ class ObsClient {
 			this.#update({ connection: authFailed ? "auth-failed" : "disconnected", replay: "unknown", error: message });
 			this.#failures++;
 			const backoff = Math.min(MAX_RECONNECT_DELAY_MS, RECONNECT_DELAY_MS * 2 ** (this.#failures - 1));
-			this.#scheduleReconnect(authFailed ? Math.max(AUTH_RETRY_DELAY_MS, backoff) : backoff);
+			const opening = !authFailed && Date.now() < this.#openingUntil;
+			this.#scheduleReconnect(opening ? OPENING_RETRY_DELAY_MS : authFailed ? Math.max(AUTH_RETRY_DELAY_MS, backoff) : backoff);
+		}
+	}
+
+	/**
+	 * obs-websocket accepts connections as soon as OBS has loaded its plugins, but answers every request
+	 * with "not ready" until OBS has finished starting and shows its window. Until then the status is
+	 * "loading". Returns early if the connection closes or is replaced meanwhile.
+	 */
+	async #waitUntilReady(attempt: number): Promise<void> {
+		while (attempt === this.#attempt && this.socket.identified) {
+			try {
+				await this.socket.call("GetVersion");
+				return;
+			} catch (error) {
+				if (!(error instanceof ObsError && error.code === NOT_READY)) {
+					return;
+				}
+			}
+			this.#update({ connection: "loading" });
+			await new Promise((resolve) => setTimeout(resolve, READY_POLL_MS));
 		}
 	}
 

@@ -1,9 +1,10 @@
 import streamDeck from "@elgato/streamdeck";
 
 import { CUSTOM_SAVE_UUID, customLength, NO_ALBUM, type SaveClipSettings, saveActions } from "./actions/save-clip";
-import { ToggleReplayBuffer } from "./actions/toggle-replay-buffer";
+import { TOGGLE_UUID, ToggleReplayBuffer } from "./actions/toggle-replay-buffer";
 import { chibisafe, type ChibisafeAlbum, type ChibisafeSettings } from "./chibisafe";
 import { obs, type ObsSettings } from "./obs";
+import { findObsApp } from "./obs-app";
 
 /** Settings shared by all keys: the OBS connection and chibisafe uploads. */
 type GlobalSettings = ObsSettings & ChibisafeSettings;
@@ -14,9 +15,18 @@ streamDeck.logger.setLevel("info");
 streamDeck.actions.registerAction(new ToggleReplayBuffer());
 saveActions.forEach((action) => streamDeck.actions.registerAction(action));
 
+/** What the On/Off key opens when it shows "NO OBS", for its settings panel. */
+async function obsAppStatus(): Promise<{ ok: boolean; detail: string }> {
+	if (!obs.isLocal) {
+		return { ok: true, detail: "OBS runs on another computer, so this key can't open it." };
+	}
+	const app = await findObsApp(obs.obsPath, false);
+	return app.ok ? { ok: true, detail: `Pressing NO OBS opens ${app.detail}` } : app;
+}
+
 /**
- * Tells the open property inspector the state of the OBS and chibisafe connections, and for a custom
- * length key whether its length is valid.
+ * Tells the open property inspector the state of the OBS and chibisafe connections, for a custom
+ * length key whether its length is valid, and for the On/Off key which OBS it opens.
  */
 async function sendStatusToPropertyInspector(): Promise<void> {
 	const action = streamDeck.ui.action;
@@ -25,6 +35,7 @@ async function sendStatusToPropertyInspector(): Promise<void> {
 	}
 
 	const custom = action.manifestId === CUSTOM_SAVE_UUID ? customLength((await action.getSettings()) as SaveClipSettings) : undefined;
+	const obsApp = action.manifestId === TOGGLE_UUID ? await obsAppStatus() : null;
 	const { connection, replay, replayBufferPro, error } = obs.status;
 	await streamDeck.ui.sendToPropertyInspector({
 		event: "status",
@@ -33,6 +44,7 @@ async function sendStatusToPropertyInspector(): Promise<void> {
 		replayBufferPro,
 		error: error ?? null,
 		length: custom ? { ok: custom.ok, detail: custom.detail } : null,
+		obsApp,
 		chibisafe: { ...chibisafe.status, obsIsLocal: obs.isLocal },
 	});
 }
@@ -83,7 +95,7 @@ async function albumItems(forKey: boolean, current: string, fresh: boolean): Pro
 /** Fills the album dropdown of the open settings panel, if it has one. */
 async function sendAlbumsToPropertyInspector(fresh: boolean): Promise<void> {
 	const action = streamDeck.ui.action;
-	if (action?.manifestId?.endsWith(".toggle")) {
+	if (action?.manifestId === TOGGLE_UUID) {
 		const items = await albumItems(false, chibisafe.album, fresh);
 		await streamDeck.ui.sendToPropertyInspector({ event: DEFAULT_ALBUM_EVENT, items });
 	} else if (action && saveActions.some(({ manifestId }) => manifestId === action.manifestId)) {
@@ -137,7 +149,11 @@ function configure(settings: GlobalSettings): void {
 	chibisafe.configure(settings);
 }
 
-streamDeck.settings.onDidReceiveGlobalSettings<GlobalSettings>((ev) => configure(ev.settings));
+streamDeck.settings.onDidReceiveGlobalSettings<GlobalSettings>((ev) => {
+	configure(ev.settings);
+	// The On/Off key's panel shows which OBS the "OBS app" setting opens.
+	void sendStatusToPropertyInspector();
+});
 
 await streamDeck.connect();
 configure(await streamDeck.settings.getGlobalSettings<GlobalSettings>());

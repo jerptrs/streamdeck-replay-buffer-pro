@@ -7,8 +7,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-10-04
+
+### Added
+
+- Pressing the On/Off key while it shows **NO OBS** opens OBS, when OBS runs on this computer and isn't running
+  yet. The plugin then tries to connect every 2 seconds for up to a minute. Standard and Steam installs are found
+  by themselves; set **OBS app** in the key's settings for others, such as a portable OBS. If OBS is already
+  running but can't be reached, the key shows the warning triangle and the log says what to check.
+- The On/Off key shows **STARTING OBS** while OBS starts up, however it was opened, until OBS has finished
+  loading and shows its window. Save keys pressed meanwhile show the warning triangle.
+
 ### Fixed
 
+- Connecting while OBS was still starting could leave the On/Off key on **DISABLED**, because OBS answers "not
+  ready" until it has loaded. The plugin now waits for OBS to be ready.
+- When the plugin connects, the On/Off key goes straight to the replay buffer's state instead of briefly
+  showing OFF.
 - The README's tip for tighter clips now also says where OBS keeps the keyframe interval when recording uses the
   stream encoder (the Streaming tab).
 
@@ -102,7 +117,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   and show the Stream Deck warning triangle instead of Replay Buffer Pro's pop-up in OBS.
 - Settings panel for the OBS WebSocket host, port and password, with a connection status line.
 
-[Unreleased]: https://github.com/jerptrs/streamdeck-replay-buffer-pro/compare/v2.0.0...HEAD
+[Unreleased]: https://github.com/jerptrs/streamdeck-replay-buffer-pro/compare/v2.1.0...HEAD
+[2.1.0]: https://github.com/jerptrs/streamdeck-replay-buffer-pro/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/jerptrs/streamdeck-replay-buffer-pro/compare/v1.2.0...v2.0.0
 [1.2.0]: https://github.com/jerptrs/streamdeck-replay-buffer-pro/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/jerptrs/streamdeck-replay-buffer-pro/compare/v1.0.1...v1.1.0

@@ -170,7 +170,7 @@ abstract class SaveClipAction extends SingletonAction<SaveClipSettings> {
 		}
 
 		if (!obs.connected) {
-			logger.warn(`Save ${label}: OBS is not connected`);
+			logger.warn(`Save ${label}: ${obs.status.connection === "loading" ? "OBS is still starting" : "OBS is not connected"}`);
 			obs.retryNow();
 			return ev.action.showAlert();
 		}

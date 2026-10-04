@@ -45,6 +45,7 @@ the file in `dist/` instead.
 | --- | --- |
 | `src/plugin.ts` | Entry point: registers the actions and wires up settings and the settings panel. |
 | `src/obs.ts` | Keeps the OBS connection alive, reconnects and tracks the replay buffer state. |
+| `src/obs-app.ts` | Finds and opens OBS for the On/Off key's NO OBS face. |
 | `src/obs-websocket.ts` | Minimal obs-websocket v5 client on top of Node's built-in WebSocket. |
 | `src/replay-buffer-pro.ts` | Asks Replay Buffer Pro to save a clip, and checks that it's installed and up to date. |
 | `src/upload.ts` | Waits for Replay Buffer Pro's trimmed clip, uploads it and copies the link. |
