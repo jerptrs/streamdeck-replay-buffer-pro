@@ -71,8 +71,10 @@ default). Place it as often as you like, each with its own length.
 
 Clips can be a little longer than the key says, for example 17 seconds from the 15 sec key. Replay Buffer Pro cuts
 without re-encoding, so a clip has to start at a keyframe: the last one before the requested start. For tighter
-clips, set a shorter keyframe interval in OBS, such as 1 s (Settings → Output in Advanced mode → Recording →
-Keyframe Interval). OBS's log shows how far each cut was moved (`drift`).
+clips, set a shorter keyframe interval in OBS, such as 1–2 s instead of 0 (auto). In Settings → Output (Advanced
+mode), it's in the **Recording** tab's encoder settings, or in the **Streaming** tab if recording uses the stream
+encoder. If you stream, keep 2 s, which streaming platforms expect. Stop the replay buffer before changing it, as
+OBS locks these settings while it runs. OBS's log shows how far each cut was moved (`drift`).
 
 In a multi-action, set the on/off key to its **On** or **Off** state to always start or stop the replay buffer
 instead of toggling it.
