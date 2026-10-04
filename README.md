@@ -4,8 +4,8 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 A Stream Deck plugin for the [Replay Buffer Pro](https://github.com/JoshuaPotter/replay-buffer-pro) OBS plugin:
-turn OBS's replay buffer on and off, and save anything from the last 15 seconds to the last 30 minutes, each
-with a single key press. Optionally, saved clips are uploaded to your [chibisafe](https://github.com/chibisafe/chibisafe)
+turn OBS's replay buffer on and off, and save anything from the last 15 seconds to the last 30 minutes, or a
+length of your own, each with a single key press. Optionally, saved clips are uploaded to your [chibisafe](https://github.com/chibisafe/chibisafe)
 server and the link is copied to your clipboard.
 
 | Action | What it does |
@@ -17,24 +17,26 @@ server and the link is copied to your clipboard.
 | **Save Last 5 min** | Saves the last 5 minutes. |
 | **Save Last 15 min** | Saves the last 15 minutes. |
 | **Save Last 30 min** | Saves the last 30 minutes. |
+| **Save Custom Length** | Saves the last 1 second to 6 hours, a length and colour you set in the key's settings. |
 
 ![Key faces](docs/key-preview.png)
 
 Top row: the toggle when on, off, starting, stopping, not connected to OBS, and with the replay buffer disabled in OBS.
 Middle rows: each save key when ready, when the replay buffer is off, when not connected, while saving, and once saved.
+Next row: custom length keys in different lengths and colours, and one still waiting for a valid length.
 Bottom row: a save key while its clip uploads to chibisafe, and once the link is copied.
 
 ## Requirements
 
 - Stream Deck app 7.1 or newer (Windows 10+ or macOS 12+)
-- OBS Studio 28 or newer (its WebSocket server is built in)
-- The [Replay Buffer Pro](https://github.com/JoshuaPotter/replay-buffer-pro) OBS plugin, version 1.4.0 or newer,
+- OBS Studio 32.2 or newer (its WebSocket server is built in)
+- The [Replay Buffer Pro](https://github.com/JoshuaPotter/replay-buffer-pro) OBS plugin, version 1.8.0 or newer,
   with the replay buffer enabled in OBS (Settings → Output → Replay Buffer)
 - Optional: a [chibisafe](https://github.com/chibisafe/chibisafe) server and API key, to upload clips
 
 ## Install
 
-1. Install the Replay Buffer Pro OBS plugin (version 1.4.0 or newer) by following its
+1. Install the Replay Buffer Pro OBS plugin (version 1.8.0 or newer) by following its
    [installation steps](https://github.com/JoshuaPotter/replay-buffer-pro#installation), and turn on the replay
    buffer in OBS (Settings → Output → Replay Buffer).
 2. Download `com.replay-buffer-pro.obs.streamDeckPlugin` from the
@@ -50,28 +52,27 @@ The [changelog](CHANGELOG.md) lists what changed in each version.
 
 ## How it works
 
-The plugin talks to OBS over its built-in WebSocket server and runs Replay Buffer Pro's save actions
-directly (obs-websocket's `TriggerHotkeyByName`). You don't have to bind any keys in OBS.
+The plugin talks to OBS over its built-in WebSocket server and asks Replay Buffer Pro to save each clip with
+its `SaveClip` request (added in Replay Buffer Pro 1.8.0). You don't have to bind any keys in OBS, and the keys
+don't depend on the lengths of Replay Buffer Pro's own buttons, so changing those with "Customize" is fine.
+If the settings panel's status line says Replay Buffer Pro wasn't found or is too old, install or update it.
 
-Replay Buffer Pro registers one action per save button: `ReplayBufferPro.SaveButton1` … `SaveButton6`
-(15 s, 30 s, 60 s, 5 min, 15 min and 30 min by default, one for each Stream Deck key). You can change
-those durations in OBS with "Customize", so each Stream Deck key finds the right button by itself:
-
-- **Auto** (default): matches the key's length against your Replay Buffer Pro buttons. When OBS runs on the
-  same computer, it reads Replay Buffer Pro's own settings file (`save_button_settings.json` in OBS's
-  `plugin_config/replay-buffer-pro` folder), so customised buttons are picked up automatically.
-- **Button 1–6**: always triggers that button. Use this for a remote or portable OBS install with
-  customised buttons.
-
-The key's settings panel shows which button it will trigger. If it says Replay Buffer Pro wasn't found, check
-that the OBS plugin is installed and at least version 1.4.0.
-
-Before triggering a save, the key checks that OBS is connected, that the replay buffer is running and
-that the buffer is long enough for the clip. If any check fails, the key shows the Stream Deck warning
-triangle instead of Replay Buffer Pro popping up a dialog in OBS. The reason is written to the plugin's log:
+A key longer than your replay buffer saves the whole buffer, for example 10 minutes from the 30 min key when the
+buffer holds 10 minutes. If a save can't happen, for example because OBS isn't connected, the replay buffer is
+off or recording is paused, the key shows the Stream Deck warning triangle. The reason is written to the
+plugin's log:
 
 - Windows: `%APPDATA%\Elgato\StreamDeck\Plugins\com.replay-buffer-pro.obs.sdPlugin\logs`
 - macOS: `~/Library/Application Support/com.elgato.StreamDeck/Plugins/com.replay-buffer-pro.obs.sdPlugin/logs`
+
+For any other length, use **Save Custom Length**: in its settings, enter a whole number, pick seconds, minutes or
+hours, and choose the key's colour. The key shows the length you entered, e.g. **45 sec** or **2 min** (the
+default). Place it as often as you like, each with its own length.
+
+Clips can be a little longer than the key says, for example 17 seconds from the 15 sec key. Replay Buffer Pro cuts
+without re-encoding, so a clip has to start at a keyframe: the last one before the requested start. For tighter
+clips, set a shorter keyframe interval in OBS, such as 1 s (Settings → Output in Advanced mode → Recording →
+Keyframe Interval). OBS's log shows how far each cut was moved (`drift`).
 
 In a multi-action, set the on/off key to its **On** or **Off** state to always start or stop the replay buffer
 instead of toggling it.
@@ -119,8 +120,8 @@ warning triangle; the plugin's log says why.
   configure, over HTTPS unless that server is on your local network, and requests carrying it never follow
   redirects to another address. With S3 storage, the file itself goes to the storage URL chibisafe hands out,
   without the API key.
-- Outside its own folder, the plugin reads only Replay Buffer Pro's `save_button_settings.json` and, when
-  uploading, the trimmed clips in your recordings folder. It only ever uploads video files.
+- Outside its own folder, the plugin only reads the trimmed clips in your recordings folder, and only when
+  uploading. It only ever uploads video files.
 
 Found a security problem? Please report it privately as described in the [security policy](SECURITY.md).
 

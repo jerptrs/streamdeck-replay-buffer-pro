@@ -1,10 +1,9 @@
 import streamDeck from "@elgato/streamdeck";
 
-import { NO_ALBUM, type SaveClipSettings, saveActions } from "./actions/save-clip";
+import { CUSTOM_SAVE_UUID, customLength, NO_ALBUM, type SaveClipSettings, saveActions } from "./actions/save-clip";
 import { ToggleReplayBuffer } from "./actions/toggle-replay-buffer";
 import { chibisafe, type ChibisafeAlbum, type ChibisafeSettings } from "./chibisafe";
 import { obs, type ObsSettings } from "./obs";
-import { resolveSlot } from "./replay-buffer-pro";
 
 /** Settings shared by all keys: the OBS connection and chibisafe uploads. */
 type GlobalSettings = ObsSettings & ChibisafeSettings;
@@ -15,24 +14,25 @@ streamDeck.logger.setLevel("info");
 streamDeck.actions.registerAction(new ToggleReplayBuffer());
 saveActions.forEach((action) => streamDeck.actions.registerAction(action));
 
-/** Tells the open property inspector the connection state and which OBS button this key triggers. */
+/**
+ * Tells the open property inspector the state of the OBS and chibisafe connections, and for a custom
+ * length key whether its length is valid.
+ */
 async function sendStatusToPropertyInspector(): Promise<void> {
 	const action = streamDeck.ui.action;
 	if (!action) {
 		return;
 	}
 
-	const duration = saveActions.find(({ manifestId }) => manifestId === action.manifestId)?.duration;
-	const slot = duration ? await resolveSlot(duration, ((await action.getSettings()) as SaveClipSettings).slot, obs.isLocal) : undefined;
+	const custom = action.manifestId === CUSTOM_SAVE_UUID ? customLength((await action.getSettings()) as SaveClipSettings) : undefined;
 	const { connection, replay, replayBufferPro, error } = obs.status;
-
 	await streamDeck.ui.sendToPropertyInspector({
 		event: "status",
 		connection,
 		replay,
 		replayBufferPro,
 		error: error ?? null,
-		slot: slot ? { ok: slot.ok, detail: slot.detail } : null,
+		length: custom ? { ok: custom.ok, detail: custom.detail } : null,
 		chibisafe: { ...chibisafe.status, obsIsLocal: obs.isLocal },
 	});
 }
@@ -120,6 +120,7 @@ streamDeck.ui.onSendToPlugin((ev) => {
 	const { event, isRefresh } = (ev.payload as { event?: string; isRefresh?: boolean } | null) ?? {};
 	void (event === DEFAULT_ALBUM_EVENT || event === KEY_ALBUM_EVENT ? refreshAlbums(isRefresh === true) : sendStatusToPropertyInspector());
 });
+// A custom length key's panel says whether the length being typed is valid.
 streamDeck.settings.onDidReceiveSettings(() => void sendStatusToPropertyInspector());
 obs.onStatusChange(() => void sendStatusToPropertyInspector());
 

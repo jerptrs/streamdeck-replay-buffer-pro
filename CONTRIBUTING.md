@@ -46,14 +46,14 @@ the file in `dist/` instead.
 | `src/plugin.ts` | Entry point: registers the actions and wires up settings and the settings panel. |
 | `src/obs.ts` | Keeps the OBS connection alive, reconnects and tracks the replay buffer state. |
 | `src/obs-websocket.ts` | Minimal obs-websocket v5 client on top of Node's built-in WebSocket. |
-| `src/replay-buffer-pro.ts` | Maps a clip length to a Replay Buffer Pro hotkey. |
+| `src/replay-buffer-pro.ts` | Asks Replay Buffer Pro to save a clip, and checks that it's installed and up to date. |
 | `src/upload.ts` | Waits for Replay Buffer Pro's trimmed clip, uploads it and copies the link. |
 | `src/chibisafe.ts` | chibisafe client: connection check, album list, chunked and S3 uploads. |
 | `src/http.ts` | Small HTTP client that streams uploads from disk. |
 | `src/clipboard.ts` | Copies text with the OS's clipboard tool. |
 | `src/actions/` | The toggle and save actions. |
-| `src/icons.ts` | SVG artwork for all images, rendered to PNG by `scripts/render-icons.ts`. |
-| `src/key-images.ts` | Loads the rendered key images for the plugin at runtime. |
+| `src/icons.ts` | SVG artwork for all images, rendered to PNG by `scripts/render-icons.ts`; custom length keys are drawn from it at runtime. |
+| `src/key-images.ts` | Loads the rendered key images for the plugin at runtime, and turns runtime SVG into images. |
 | `com.replay-buffer-pro.obs.sdPlugin/ui/settings.html` | Settings panel (property inspector). |
 | `test/e2e.mjs` | End-to-end test. |
 

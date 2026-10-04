@@ -2,13 +2,22 @@
  * SVG artwork for every key face, action-list icon and plugin icon.
  *
  * This module has no imports so `scripts/render-icons.ts` can load it directly with Node's
- * type stripping. The script rasterises everything to PNG, so the plugin never depends on how
- * the Stream Deck app renders SVG text.
+ * type stripping. The script rasterises the artwork to PNG, so the plugin doesn't depend on how
+ * the Stream Deck app renders SVG text. Only custom length keys are drawn as SVG at runtime,
+ * because their length isn't known in advance.
  */
 
-/** Clip lengths in seconds; the same as Replay Buffer Pro's default buttons. */
+/** Clip lengths in seconds of the fixed save keys; the same as Replay Buffer Pro's default buttons. */
 export const SAVE_DURATIONS = [15, 30, 60, 300, 900, 1800] as const;
 export type SaveDuration = (typeof SAVE_DURATIONS)[number];
+
+/** A clip length as shown on a key: the number, then its unit. */
+export type KeyLength = { value: number; unit: LengthUnit };
+export type LengthUnit = "sec" | "min" | "h";
+
+/** What a custom length key shows until its settings say otherwise. */
+export const CUSTOM_DEFAULT_LENGTH: KeyLength = { value: 2, unit: "min" };
+export const CUSTOM_DEFAULT_ACCENT = "#2dd4bf";
 
 export const SAVE_VARIANTS = ["ready", "inactive", "offline", "saving", "saved"] as const;
 export type SaveVariant = (typeof SAVE_VARIANTS)[number];
@@ -123,45 +132,65 @@ function label(text: string, fill: string, size = 29, y = 129): string {
 	return `<text x="${CX}" y="${y}" text-anchor="middle" font-family="${FONT}" font-weight="bold" font-size="${size}" fill="${fill}">${text}</text>`;
 }
 
-/** "15 sec" or "5 min" with the number emphasised; up to 60 seconds is shown in seconds. */
-function durationLabel(duration: number, numberFill: string, unitFill: string): string {
-	const [value, unit] = duration > 60 ? [duration / 60, "min"] : [duration, "sec"];
+/** Arial Bold advance widths (em) of the label's characters, to fit long custom lengths on the key. */
+const DIGIT_WIDTH = 0.556;
+const UNIT_WIDTH: Record<LengthUnit, number> = { sec: 1.668, min: 1.778, h: 0.611 };
+const LABEL_MAX_WIDTH = 128;
+
+/** "15 sec" or "5 min" with the number emphasised; scaled down when a custom length is too wide. */
+function lengthLabel({ value, unit }: KeyLength, numberFill: string, unitFill: string): string {
+	const width = String(value).length * DIGIT_WIDTH * 31 + 5 + UNIT_WIDTH[unit] * 23;
+	const scale = Math.min(1, LABEL_MAX_WIDTH / width);
 	return (
 		`<text x="${CX}" y="129" text-anchor="middle" font-family="${FONT}" font-weight="bold">` +
-		`<tspan font-size="31" fill="${numberFill}">${value}</tspan>` +
-		`<tspan font-size="23" fill="${unitFill}" dx="5">${unit}</tspan>` +
+		`<tspan font-size="${fmt(31 * scale)}" fill="${numberFill}">${value}</tspan>` +
+		`<tspan font-size="${fmt(23 * scale)}" fill="${unitFill}" dx="${fmt(5 * scale)}">${unit}</tspan>` +
 		`</text>`
 	);
+}
+
+/** Fixed keys show up to 60 seconds in seconds, longer clips in minutes. */
+function fixedLength(duration: SaveDuration): KeyLength {
+	return duration > 60 ? { value: duration / 60, unit: "min" } : { value: duration, unit: "sec" };
 }
 
 function svg(body: string, size = SIZE): string {
 	return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${SIZE} ${SIZE}">${body}</svg>`;
 }
 
-/** Key face for a "save last N seconds" action. */
+/** Key face for a fixed "save last N seconds" action. */
 export function saveKeySvg(duration: SaveDuration, variant: SaveVariant): string {
-	const accent = DURATION_ACCENT[duration];
+	return customSaveKeySvg(fixedLength(duration), DURATION_ACCENT[duration], variant);
+}
+
+/**
+ * Key face for a save key of any length and accent colour. Without a length (a custom key whose
+ * length isn't valid), the key asks for one.
+ */
+export function customSaveKeySvg(length: KeyLength | undefined, accent: string, variant: SaveVariant): string {
+	const lengthOrPrompt = (numberFill: string, unitFill: string) =>
+		length ? lengthLabel(length, numberFill, unitFill) : label("SET LENGTH", numberFill, 18);
 	switch (variant) {
 		case "ready":
 			return svg(
 				background(accent) +
 					replayRing(CX, RING_CY, RING_R, accent, 8) +
 					saveGlyph(CX, RING_CY, WHITE) +
-					durationLabel(duration, WHITE, "#c9cedb"),
+					lengthOrPrompt(WHITE, "#c9cedb"),
 			);
 		case "inactive":
 			return svg(
 				background() +
 					replayRing(CX, RING_CY, RING_R, MUTED, 8) +
 					saveGlyph(CX, RING_CY, MUTED) +
-					durationLabel(duration, MUTED_TEXT, MUTED),
+					lengthOrPrompt(MUTED_TEXT, MUTED),
 			);
 		case "offline":
 			return svg(
 				background() +
 					replayRing(CX, RING_CY, RING_R, MUTED, 8, true) +
 					saveGlyph(CX, RING_CY, MUTED) +
-					durationLabel(duration, MUTED_TEXT, MUTED),
+					lengthOrPrompt(MUTED_TEXT, MUTED),
 			);
 		case "saving":
 			return svg(background(accent) + replayRing(CX, RING_CY, RING_R, accent, 8) + dotsGlyph(CX, RING_CY, WHITE) + label("SAVING", accent, 23));

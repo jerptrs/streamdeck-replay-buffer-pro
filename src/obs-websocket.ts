@@ -12,8 +12,10 @@ type Requests = {
 	StartReplayBuffer: [undefined, undefined];
 	StopReplayBuffer: [undefined, undefined];
 	GetHotkeyList: [undefined, { hotkeys: string[] }];
-	TriggerHotkeyByName: [{ hotkeyName: string }, undefined];
-	GetProfileParameter: [{ parameterCategory: string; parameterName: string }, { parameterValue: string | null; defaultParameterValue: string | null }];
+	CallVendorRequest: [
+		{ vendorName: string; requestType: string; requestData?: Record<string, unknown> },
+		{ vendorName: string; requestType: string; responseData?: Record<string, unknown> },
+	];
 };
 
 /** Events this plugin listens to. */

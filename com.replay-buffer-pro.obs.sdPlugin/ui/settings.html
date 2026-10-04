@@ -81,26 +81,34 @@
         <div class="status"><span id="status-dot" class="dot"></span><span id="status-text">Waiting for plugin…</span></div>
     </sdpi-item>
 
-    <div id="save-options" hidden>
-        <div class="heading">Replay Buffer Pro</div>
+    <div id="custom-options" hidden>
+        <div class="heading">Clip length</div>
 
-        <sdpi-item label="OBS button">
-            <sdpi-select setting="slot" default="auto">
-                <option value="auto">Auto (match this key's length)</option>
-                <option value="1">Button 1</option>
-                <option value="2">Button 2</option>
-                <option value="3">Button 3</option>
-                <option value="4">Button 4</option>
-                <option value="5">Button 5</option>
-                <option value="6">Button 6</option>
+        <sdpi-item label="Length">
+            <sdpi-textfield setting="length" default="2" pattern="[0-9]*" placeholder="2"></sdpi-textfield>
+        </sdpi-item>
+
+        <sdpi-item label="Unit">
+            <sdpi-select setting="unit" default="min">
+                <option value="sec">seconds</option>
+                <option value="min">minutes</option>
+                <option value="h">hours</option>
             </sdpi-select>
         </sdpi-item>
 
-        <sdpi-item>
-            <div id="slot-detail" class="note"></div>
+        <sdpi-item label="Colour">
+            <sdpi-color setting="color" default="#2dd4bf"></sdpi-color>
         </sdpi-item>
 
-        <sdpi-item label="chibisafe">
+        <sdpi-item>
+            <div id="length-detail" class="note"></div>
+        </sdpi-item>
+    </div>
+
+    <div id="save-options" hidden>
+        <div class="heading">chibisafe uploads</div>
+
+        <sdpi-item label="Uploads">
             <sdpi-checkbox setting="upload" default="true" label="Upload clips from this key"></sdpi-checkbox>
         </sdpi-item>
 
@@ -150,11 +158,11 @@
     <details class="help">
         <summary>How to connect OBS</summary>
         <ol>
-            <li>Install the <b>Replay Buffer Pro</b> OBS plugin and enable the replay buffer in OBS (Settings → Output → Replay Buffer).</li>
+            <li>Install the <b>Replay Buffer Pro</b> OBS plugin (1.8.0 or newer) and enable the replay buffer in OBS (Settings → Output → Replay Buffer).</li>
             <li>In OBS open <b>Tools → WebSocket Server Settings</b> and tick <b>Enable WebSocket server</b>.</li>
             <li>Click <b>Show Connect Info</b> and copy the port and password here.</li>
         </ol>
-        <p>No OBS hotkeys are needed: the keys run Replay Buffer Pro's save actions directly.</p>
+        <p>No OBS hotkeys are needed: the keys ask Replay Buffer Pro to save directly. A key longer than your replay buffer saves the whole buffer.</p>
     </details>
 
     <script>
@@ -175,25 +183,29 @@
             unknown: "replay buffer state unknown",
         };
 
+        const REPLAY_BUFFER_PRO_TEXT = {
+            missing: "Replay Buffer Pro not found in OBS",
+            outdated: "Replay Buffer Pro is too old, update it to 1.8.0 or newer",
+        };
+
         function renderStatus(status) {
             const dot = document.getElementById("status-dot");
             const text = document.getElementById("status-text");
 
             if (status.connection === "connected") {
-                const warnings = [];
-                if (!status.replayBufferPro) warnings.push("Replay Buffer Pro not found in OBS");
-                dot.className = "dot " + (warnings.length || status.replay === "unavailable" ? "busy" : "ok");
-                text.textContent = ["Connected", REPLAY_TEXT[status.replay] ?? status.replay, ...warnings].join(" · ");
+                const warning = REPLAY_BUFFER_PRO_TEXT[status.replayBufferPro];
+                dot.className = "dot " + (warning || status.replay === "unavailable" ? "busy" : "ok");
+                text.textContent = ["Connected", REPLAY_TEXT[status.replay] ?? status.replay, warning].filter(Boolean).join(" · ");
             } else {
                 const [tone, message] = CONNECTION_TEXT[status.connection] ?? ["bad", status.connection];
                 dot.className = "dot " + tone;
                 text.textContent = message;
             }
 
-            const detail = document.getElementById("slot-detail");
-            if (status.slot) {
-                detail.textContent = status.slot.detail;
-                detail.className = "note" + (status.slot.ok ? "" : " bad");
+            const lengthDetail = document.getElementById("length-detail");
+            if (status.length) {
+                lengthDetail.textContent = status.length.detail;
+                lengthDetail.className = "note" + (status.length.ok ? "" : " bad");
             }
 
             if (status.chibisafe) renderChibisafe(status.chibisafe);
@@ -230,7 +242,8 @@
         });
 
         streamDeckClient.getConnectionInfo().then(({ actionInfo }) => {
-            document.getElementById("save-options").hidden = !/\.save-\d+$/.test(actionInfo.action);
+            document.getElementById("custom-options").hidden = !/\.save-custom$/.test(actionInfo.action);
+            document.getElementById("save-options").hidden = !/\.save-(\d+|custom)$/.test(actionInfo.action);
             document.getElementById("chibisafe-options").hidden = !/\.toggle$/.test(actionInfo.action);
             streamDeckClient.send("sendToPlugin", { event: "getStatus" });
         });

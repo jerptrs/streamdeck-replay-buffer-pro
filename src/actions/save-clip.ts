@@ -1,5 +1,6 @@
 import streamDeck, {
 	action,
+	type DidReceiveSettingsEvent,
 	type KeyAction,
 	type KeyDownEvent,
 	SingletonAction,
@@ -8,10 +9,22 @@ import streamDeck, {
 } from "@elgato/streamdeck";
 
 import { chibisafe } from "../chibisafe";
-import { SAVE_DURATIONS, saveKeyName, type SaveDuration, type SaveVariant, uploadKeyName, type UploadVariant } from "../icons";
-import { keyImage } from "../key-images";
+import {
+	CUSTOM_DEFAULT_ACCENT,
+	CUSTOM_DEFAULT_LENGTH,
+	customSaveKeySvg,
+	type KeyLength,
+	type LengthUnit,
+	SAVE_DURATIONS,
+	saveKeyName,
+	type SaveDuration,
+	type SaveVariant,
+	uploadKeyName,
+	type UploadVariant,
+} from "../icons";
+import { keyImage, svgImage } from "../key-images";
 import { describe, obs } from "../obs";
-import { formatDuration, resolveSlot, type SlotSetting } from "../replay-buffer-pro";
+import { describeRefusal, formatDuration, type SaveClipResult } from "../replay-buffer-pro";
 import { uploadClip, waitForTrimmedClip } from "../upload";
 
 const logger = streamDeck.logger.createScope("SaveClip");
@@ -29,14 +42,42 @@ const SAVE_TIMEOUT_MS = 120_000;
 /** Per-key album value meaning "no album", even when the on/off key sets a default album. */
 export const NO_ALBUM = "none";
 
+export const CUSTOM_SAVE_UUID = "com.replay-buffer-pro.obs.save-custom";
+
 export type SaveClipSettings = {
-	/** Which Replay Buffer Pro button to trigger; see {@link SlotSetting}. */
-	slot?: SlotSetting;
 	/** Upload this key's clips to chibisafe when uploading is on globally. Defaults to true. */
 	upload?: boolean;
 	/** chibisafe album for this key's clips: unset or empty uses the default album, {@link NO_ALBUM} uses none. */
 	album?: string;
+	/** Custom length keys: the length as typed, a whole number of `unit`s. */
+	length?: string;
+	unit?: LengthUnit;
+	/** Custom length keys: the accent colour, as `#rrggbb`. */
+	color?: string;
 };
+
+const UNIT_SECONDS: Record<LengthUnit, number> = { sec: 1, min: 60, h: 3600 };
+/** Replay Buffer Pro saves 1 second to 6 hours. */
+const MAX_SECONDS = 21_600;
+
+type CustomLength = { ok: true; length: KeyLength; seconds: number; detail: string } | { ok: false; detail: string };
+
+/** A custom length key's length, with the defaults its settings panel shows for anything not set yet. */
+export function customLength({ length, unit }: SaveClipSettings): CustomLength {
+	const validUnit = unit && Object.hasOwn(UNIT_SECONDS, unit) ? unit : CUSTOM_DEFAULT_LENGTH.unit;
+	const text = String(length ?? CUSTOM_DEFAULT_LENGTH.value).trim();
+	const value = /^\d{1,5}$/.test(text) ? Number(text) : 0;
+	const seconds = value * UNIT_SECONDS[validUnit];
+	if (value < 1 || seconds > MAX_SECONDS) {
+		return { ok: false, detail: "Enter a whole number, from 1 second up to 6 hours." };
+	}
+	return { ok: true, length: { value, unit: validUnit }, seconds, detail: `Saves the last ${value} ${validUnit}.` };
+}
+
+/** The settings' colour, if it's a valid `#rrggbb` (it ends up in the key's SVG). */
+function accentOf({ color }: SaveClipSettings): string {
+	return color && /^#[0-9a-f]{6}$/i.test(color) ? color : CUSTOM_DEFAULT_ACCENT;
+}
 
 /** A temporary key face that replaces the normal one while a save or upload is in progress. */
 type Transient = {
@@ -53,15 +94,20 @@ type Transient = {
 };
 
 /**
- * Saves the last N seconds of the replay buffer by triggering the matching Replay Buffer Pro hotkey
- * through obs-websocket, then shows "SAVING" until OBS reports the file was written. When uploading
- * is on, the trimmed clip then goes to chibisafe and its link to the clipboard.
+ * Saves the last N seconds of the replay buffer with Replay Buffer Pro's `SaveClip` request through
+ * obs-websocket, then shows "SAVING" until OBS reports the file was written. When uploading is on, the
+ * trimmed clip then goes to chibisafe and its link to the clipboard.
  */
 abstract class SaveClipAction extends SingletonAction<SaveClipSettings> {
-	abstract readonly duration: SaveDuration;
+	/** The clip length in seconds, or undefined when a custom key's length isn't valid. */
+	protected abstract secondsOf(settings: SaveClipSettings): number | undefined;
+	/** The image for a save face (ready, inactive, offline, saving or saved). */
+	protected abstract saveFace(settings: SaveClipSettings, variant: SaveVariant): string;
 
 	readonly #transient = new Map<string, Transient>();
 	readonly #lastImage = new Map<string, string>();
+	/** Each key's settings, which custom length keys are drawn from. */
+	readonly #settings = new Map<string, SaveClipSettings>();
 
 	constructor() {
 		super();
@@ -91,6 +137,7 @@ abstract class SaveClipAction extends SingletonAction<SaveClipSettings> {
 	}
 
 	override onWillAppear(ev: WillAppearEvent<SaveClipSettings>): Promise<void> | void {
+		this.#settings.set(ev.action.id, ev.payload.settings);
 		this.#lastImage.delete(ev.action.id);
 		if (ev.action.isKey()) {
 			return this.#render(ev.action);
@@ -100,10 +147,27 @@ abstract class SaveClipAction extends SingletonAction<SaveClipSettings> {
 	override onWillDisappear(ev: WillDisappearEvent<SaveClipSettings>): void {
 		clearTimeout(this.#transient.get(ev.action.id)?.timer);
 		this.#transient.delete(ev.action.id);
+		this.#settings.delete(ev.action.id);
+	}
+
+	override onDidReceiveSettings(ev: DidReceiveSettingsEvent<SaveClipSettings>): Promise<void> | void {
+		// A custom key's face follows its length and colour while they're being edited.
+		this.#settings.set(ev.action.id, ev.payload.settings);
+		if (ev.action.isKey()) {
+			return this.#render(ev.action);
+		}
 	}
 
 	override async onKeyDown(ev: KeyDownEvent<SaveClipSettings>): Promise<void> {
-		const label = formatDuration(this.duration);
+		const { settings } = ev.payload;
+		this.#settings.set(ev.action.id, settings);
+		const seconds = this.secondsOf(settings);
+		const label = this.#label(settings);
+
+		if (seconds === undefined) {
+			logger.warn(`Save: ${customLength(settings).detail} (in the key's settings)`);
+			return ev.action.showAlert();
+		}
 
 		if (!obs.connected) {
 			logger.warn(`Save ${label}: OBS is not connected`);
@@ -116,35 +180,29 @@ abstract class SaveClipAction extends SingletonAction<SaveClipSettings> {
 			return ev.action.showAlert();
 		}
 
-		// Replay Buffer Pro refuses clips longer than the buffer with a pop-up in OBS; catch it here instead.
-		const bufferLength = await obs.getReplayBufferLength();
-		if (bufferLength !== undefined && this.duration > bufferLength) {
-			logger.warn(`Save ${label}: the replay buffer only holds ${bufferLength} seconds; increase it in OBS`);
-			return ev.action.showAlert();
-		}
-
-		const slot = await resolveSlot(this.duration, ev.payload.settings.slot, obs.isLocal);
-		if (!slot.ok) {
-			logger.warn(`Save ${label}: ${slot.detail}`);
-			return ev.action.showAlert();
-		}
-
-		let upload = chibisafe.enabled && ev.payload.settings.upload !== false;
+		let upload = chibisafe.enabled && settings.upload !== false;
 		if (upload && !obs.isLocal) {
 			logger.warn(`Save ${label}: not uploading, because the clip is saved on another computer (OBS isn't local)`);
 			upload = false;
 		}
 
+		let result: SaveClipResult;
 		try {
-			await obs.socket.call("TriggerHotkeyByName", { hotkeyName: slot.hotkeyName });
-			logger.info(`Save ${label}: triggered ${slot.hotkeyName}${upload ? ", will upload to chibisafe" : ""}`);
+			result = await obs.saveClip(seconds);
 		} catch (error) {
-			const missing = !(await obs.detectReplayBufferPro());
-			logger.error(`Save ${label}: ${missing ? "Replay Buffer Pro is not installed or not loaded in OBS" : describe(error)}`);
+			logger.error(`Save ${label}: ${describe(error)}`);
+			return ev.action.showAlert();
+		}
+		if (!result.accepted) {
+			logger.warn(`Save ${label}: ${describeRefusal(result.error)}`);
 			return ev.action.showAlert();
 		}
 
-		const { album: keyAlbum } = ev.payload.settings;
+		// A key longer than the replay buffer saves the whole buffer.
+		const shortened = result.clamped ? `, shortened to the whole buffer (${formatDuration(result.durationSeconds)})` : "";
+		logger.info(`Save ${label}: saving${shortened}${upload ? ", will upload to chibisafe" : ""}`);
+
+		const { album: keyAlbum } = settings;
 		const album = keyAlbum === NO_ALBUM ? "" : keyAlbum || chibisafe.album;
 		this.#setTransient(ev.action.id, { state: "saving", upload, album }, SAVE_TIMEOUT_MS);
 	}
@@ -183,21 +241,27 @@ abstract class SaveClipAction extends SingletonAction<SaveClipSettings> {
 			this.#renderAll();
 		}).then(
 			() => current() && this.#setTransient(id, { state: "copied" }, COPIED_FLASH_MS),
-			(error: unknown) => (current() ? this.#fail(id, error) : this.#logUploadError(error)),
+			(error: unknown) => (current() ? this.#fail(id, error) : this.#logUploadError(id, error)),
 		);
 	}
 
 	/** Ends the key's save or upload with the Stream Deck warning triangle. */
 	async #fail(id: string, error: unknown): Promise<void> {
-		this.#logUploadError(error);
+		this.#logUploadError(id, error);
 		this.#transient.delete(id);
 		this.#renderAll();
 		const action = this.actions.find((a) => a.id === id);
 		if (action?.isKey()) await action.showAlert();
 	}
 
-	#logUploadError(error: unknown): void {
-		logger.error(`Upload ${formatDuration(this.duration)}: ${error instanceof Error ? error.message : String(error)}`);
+	#logUploadError(id: string, error: unknown): void {
+		logger.error(`Upload ${this.#label(this.#settings.get(id) ?? {})}: ${error instanceof Error ? error.message : String(error)}`);
+	}
+
+	/** The key's length for log lines, e.g. "15 sec". */
+	#label(settings: SaveClipSettings): string {
+		const seconds = this.secondsOf(settings);
+		return seconds === undefined ? "(no valid length)" : formatDuration(seconds);
 	}
 
 	/** Shows a temporary face; with a duration it reverts to the normal face afterwards. */
@@ -221,37 +285,62 @@ abstract class SaveClipAction extends SingletonAction<SaveClipSettings> {
 	}
 
 	async #render(action: KeyAction<SaveClipSettings>): Promise<void> {
-		const image = keyImage(this.#faceName(this.#transient.get(action.id)));
+		const image = this.#face(action.id);
 		if (this.#lastImage.get(action.id) !== image) {
 			this.#lastImage.set(action.id, image);
 			await action.setImage(image);
 		}
 	}
 
-	#faceName(transient: Transient | undefined): string {
+	#face(id: string): string {
+		const transient = this.#transient.get(id);
+		const settings = this.#settings.get(id) ?? {};
 		switch (transient?.state) {
 			case "uploading":
-				return uploadKeyName(Math.min(90, Math.floor((transient.progress ?? 0) * 10) * 10) as UploadVariant);
+				return keyImage(uploadKeyName(Math.min(90, Math.floor((transient.progress ?? 0) * 10) * 10) as UploadVariant));
 			case "copied":
-				return uploadKeyName("copied");
+				return keyImage(uploadKeyName("copied"));
 			case "saving":
 			case "saved":
-				return saveKeyName(this.duration, transient.state);
+				return this.saveFace(settings, transient.state);
 		}
 
 		const { connection, replay } = obs.status;
 		const variant: SaveVariant = connection !== "connected" ? "offline" : replay === "started" ? "ready" : "inactive";
-		return saveKeyName(this.duration, variant);
+		return this.saveFace(settings, variant);
 	}
 }
 
 function createSaveAction(duration: SaveDuration): SaveClipAction {
 	@action({ UUID: `com.replay-buffer-pro.obs.save-${duration}` })
 	class SaveClip extends SaveClipAction {
-		readonly duration = duration;
+		protected override secondsOf(): number {
+			return duration;
+		}
+
+		protected override saveFace(_settings: SaveClipSettings, variant: SaveVariant): string {
+			return keyImage(saveKeyName(duration, variant));
+		}
 	}
 	return new SaveClip();
 }
 
-/** One action per clip length, e.g. `com.replay-buffer-pro.obs.save-15` for the last 15 seconds. */
-export const saveActions = SAVE_DURATIONS.map(createSaveAction);
+/** A save key whose length and colour are set in its settings, drawn at runtime. */
+@action({ UUID: CUSTOM_SAVE_UUID })
+class SaveCustomClip extends SaveClipAction {
+	protected override secondsOf(settings: SaveClipSettings): number | undefined {
+		const custom = customLength(settings);
+		return custom.ok ? custom.seconds : undefined;
+	}
+
+	protected override saveFace(settings: SaveClipSettings, variant: SaveVariant): string {
+		const custom = customLength(settings);
+		return svgImage(customSaveKeySvg(custom.ok ? custom.length : undefined, accentOf(settings), variant));
+	}
+}
+
+/**
+ * One action per fixed clip length, e.g. `com.replay-buffer-pro.obs.save-15` for the last 15 seconds,
+ * and the custom length key.
+ */
+export const saveActions: SaveClipAction[] = [...SAVE_DURATIONS.map(createSaveAction), new SaveCustomClip()];

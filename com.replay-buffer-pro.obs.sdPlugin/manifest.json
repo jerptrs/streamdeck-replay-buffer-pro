@@ -1,9 +1,9 @@
 {
 	"$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
 	"Name": "OBS Replay Buffer Pro",
-	"Version": "1.2.0.0",
+	"Version": "2.0.0.0",
 	"Author": "jerptrs",
-	"Description": "Toggle OBS's replay buffer and save the last 15 sec, 30 sec, 60 sec, 5 min, 15 min or 30 min with the Replay Buffer Pro OBS plugin — straight through OBS WebSocket, no OBS hotkeys needed. Optionally uploads clips to chibisafe and copies the link.",
+	"Description": "Toggle OBS's replay buffer and save the last 15 sec, 30 sec, 60 sec, 5 min, 15 min, 30 min or any length you choose with the Replay Buffer Pro OBS plugin — straight through OBS WebSocket, no OBS hotkeys needed. Optionally uploads clips to chibisafe and copies the link.",
 	"URL": "https://github.com/jerptrs/streamdeck-replay-buffer-pro",
 	"Actions": [
 		{
@@ -121,6 +121,22 @@
 			"States": [
 				{
 					"Image": "imgs/keys/save-1800-ready",
+					"ShowTitle": false
+				}
+			]
+		},
+		{
+			"Name": "Save Custom Length",
+			"UUID": "com.replay-buffer-pro.obs.save-custom",
+			"Icon": "imgs/actions/save",
+			"Tooltip": "Saves a length of the replay buffer you choose, from 1 second to 6 hours, using Replay Buffer Pro.",
+			"PropertyInspectorPath": "ui/settings.html",
+			"Controllers": [
+				"Keypad"
+			],
+			"States": [
+				{
+					"Image": "imgs/keys/save-custom-ready",
 					"ShowTitle": false
 				}
 			]

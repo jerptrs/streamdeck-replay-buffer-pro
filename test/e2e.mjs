@@ -11,6 +11,7 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { Resvg } from "@resvg/resvg-js";
 import { WebSocketServer } from "ws";
 
 const PLUGIN_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "com.replay-buffer-pro.obs.sdPlugin");
@@ -37,8 +38,12 @@ function check(name, passed, detail = "") {
 
 // --------------------------------------------------------------------------- fake OBS
 
-/** trim: "ok", "fail" (partial file deleted after a while) or "fail-fast" (deleted before any poll could see it). */
-const obsState = { replayActive: false, recRBTime: "300", mode: "Simple", replayBufferPro: true, clipSize: 2_500, trim: "ok", foreignSaveFirst: false };
+/**
+ * replayBufferPro: "1.8.0" (has SaveClip), "1.7.0" (only the save button hotkeys) or null (not loaded).
+ * bufferLength: the replay buffer length in seconds. saveRefused: Replay Buffer Pro refuses saves (recording paused).
+ * trim: "ok", "fail" (partial file deleted after a while) or "fail-fast" (deleted before any poll could see it).
+ */
+const obsState = { replayActive: false, bufferLength: 300, replayBufferPro: "1.8.0", saveRefused: false, clipSize: 2_500, trim: "ok", foreignSaveFirst: false };
 const obsRequests = [];
 const obsClients = new Set();
 let obsServer;
@@ -81,13 +86,21 @@ async function startObs() {
 					const rbp = obsState.replayBufferPro ? [1, 2, 3, 4, 5, 6].map((i) => `ReplayBufferPro.SaveButton${i}`) : [];
 					return ok({ hotkeys: ["OBSBasic.StartStreaming", ...rbp] });
 				}
-				case "GetProfileParameter": {
-					const { parameterCategory, parameterName } = requestData;
-					if (parameterCategory === "Output" && parameterName === "Mode") {
-						return ok({ parameterValue: obsState.mode, defaultParameterValue: "Simple" });
+				case "CallVendorRequest": {
+					const { vendorName, requestType: vendorRequest, requestData: data } = requestData;
+					if (obsState.replayBufferPro !== "1.8.0" || vendorName !== "replay-buffer-pro" || vendorRequest !== "SaveClip") {
+						return fail(600, "No vendor was found by that name.");
 					}
-					const activeSection = obsState.mode === "Advanced" ? "AdvOut" : "SimpleOutput";
-					return ok({ parameterValue: parameterCategory === activeSection ? obsState.recRBTime : "20", defaultParameterValue: "20" });
+					// Replay Buffer Pro 1.8.0's answers (src/plugin/websocket-command.cpp).
+					const reply = (responseData) => ok({ vendorName, requestType: vendorRequest, responseData });
+					const seconds = data?.durationSeconds;
+					if (!Number.isInteger(seconds) || seconds < 1 || seconds > 21600) return reply({ accepted: false, error: "invalid-duration" });
+					if (!obsState.replayActive) return reply({ accepted: false, error: "buffer-inactive" });
+					if (obsState.saveRefused) return reply({ accepted: false, error: "save-refused" });
+					const saved = Math.min(seconds, obsState.bufferLength);
+					reply({ accepted: true, durationSeconds: saved, clamped: saved < seconds });
+					setTimeout(saveReplay, 300);
+					return;
 				}
 				case "ToggleReplayBuffer":
 				case "StartReplayBuffer":
@@ -97,13 +110,6 @@ async function startObs() {
 					ok(requestType === "ToggleReplayBuffer" ? { outputActive: target } : undefined);
 					return setReplay(target);
 				}
-				case "TriggerHotkeyByName":
-					if (!obsState.replayBufferPro || !requestData.hotkeyName.startsWith("ReplayBufferPro.")) {
-						return fail(600, "No hotkeys were found by that name.");
-					}
-					ok();
-					setTimeout(saveReplay, 300);
-					return;
 				default:
 					return fail(204, "Unknown request type");
 			}
@@ -175,6 +181,7 @@ const contexts = {
 	save60: { action: `${UUID}.save-60`, settings: {} },
 	save300: { action: `${UUID}.save-300`, settings: {} },
 	save1800: { action: `${UUID}.save-1800`, settings: {} },
+	saveCustom: { action: `${UUID}.save-custom`, settings: {} },
 };
 
 const sdMessages = [];
@@ -209,7 +216,14 @@ function send(event, context, payload = {}) {
 }
 
 const sdSince = (index, event, context) => sdMessages.slice(index).filter((m) => m.event === event && (!context || m.context === context));
-const triggeredSince = (index) => obsRequests.slice(index).filter((r) => r.requestType === "TriggerHotkeyByName").map((r) => r.requestData.hotkeyName);
+/** Clip lengths asked of Replay Buffer Pro since request index `index`, leaving out its 0 second check. */
+const savesSince = (index) =>
+	obsRequests
+		.slice(index)
+		.filter((r) => r.requestType === "CallVendorRequest" && r.requestData.vendorName === "replay-buffer-pro" && r.requestData.requestType === "SaveClip")
+		.map((r) => r.requestData.requestData.durationSeconds)
+		.filter((seconds) => seconds !== 0);
+const replayBufferProChecks = () => obsRequests.filter((r) => r.requestType === "CallVendorRequest" && r.requestData.requestData?.durationSeconds === 0).length;
 
 // Map the base64 images the plugin sends back to their file names. Identical faces (every "SAVED"
 // face looks the same) share an entry, so pick the name that matches the key.
@@ -220,10 +234,40 @@ for (const file of readdirSync(path.join(PLUGIN_DIR, "imgs", "keys")).filter((f)
 }
 
 function faceName(context, image) {
+	if (image?.startsWith("data:image/svg+xml;base64,")) {
+		// Custom length keys are drawn at runtime; name their faces like the pre-rendered ones.
+		const svg = decodeSvg(image);
+		const variant = svg.includes("SAVING") ? "saving" : svg.includes("SAVED") ? "saved" : svg.includes("stroke-dasharray") ? "offline" : svg.includes('id="glow"') ? "ready" : "inactive";
+		return `save-custom-${variant}`;
+	}
 	const names = keyImages.get(image) ?? [];
 	const prefix = contexts[context].action.split(".").at(-1);
 	return names.find((name) => name.startsWith(prefix)) ?? names.join("|");
 }
+
+const decodeSvg = (image) => Buffer.from(image.slice(image.indexOf(",") + 1), "base64").toString("utf8");
+
+/** The SVG a custom length key currently shows. */
+const customSvg = (context) => {
+	const image = sdSince(0, "setImage", context).at(-1)?.payload.image ?? "";
+	return image.startsWith("data:image/svg+xml;base64,") ? decodeSvg(image) : "";
+};
+
+/** The length a custom key shows, e.g. "2 min", or its "SET LENGTH" prompt. */
+const customLabel = (context) => {
+	const text = customSvg(context).match(/<text[^>]*y="129"[^>]*>(.*?)<\/text>/)?.[1] ?? "";
+	return text.replace(/<tspan[^>]*>([^<]*)<\/tspan>/g, "$1 ").replace(/<[^>]+>/g, "").trim();
+};
+
+/** Whether an SVG parses and renders; resvg rejects malformed markup. */
+const renders = (svg) => {
+	try {
+		new Resvg(svg).render();
+		return true;
+	} catch {
+		return false;
+	}
+};
 
 /** The key's current face. */
 const face = (context) => faceName(context, sdSince(0, "setImage", context).at(-1)?.payload.image);
@@ -236,17 +280,9 @@ const faceBecomes = (context, name, timeout) => waitFor(() => face(context) === 
 const logDir = path.join(PLUGIN_DIR, "logs");
 const logText = () => (existsSync(logDir) ? readdirSync(logDir).map((file) => readFileSync(path.join(logDir, file), "utf8")).join("\n") : "");
 
-// --------------------------------------------------------------------------- Replay Buffer Pro config
+// --------------------------------------------------------------------------- temp files
 
-// Point OBS's config folder at a temp dir on every OS so the test never reads a real config.
 const tempHome = mkdtempSync(path.join(os.tmpdir(), "rbp-e2e-"));
-const obsConfigDir =
-	process.platform === "win32"
-		? path.join(tempHome, "obs-studio")
-		: process.platform === "darwin"
-			? path.join(tempHome, "Library", "Application Support", "obs-studio")
-			: path.join(tempHome, "obs-studio");
-const rbpSettingsFile = path.join(obsConfigDir, "plugin_config", "replay-buffer-pro", "save_button_settings.json");
 const recordings = path.join(tempHome, "recordings");
 mkdirSync(recordings);
 
@@ -370,9 +406,6 @@ const child = spawn(
 	["bin/plugin.js", "-port", String(streamDeck.address().port), "-pluginUUID", UUID, "-registerEvent", "registerPlugin", "-info", JSON.stringify(info)],
 	{ cwd: PLUGIN_DIR, env: {
 			...process.env,
-			APPDATA: tempHome,
-			HOME: tempHome,
-			XDG_CONFIG_HOME: tempHome,
 			PATH: `${fakeBin}${path.delimiter}${process.env.PATH}`,
 			FAKE_CLIPBOARD: clipboardFile,
 		}, stdio: ["ignore", "pipe", "pipe"] },
@@ -382,10 +415,11 @@ child.stdout.on("data", (chunk) => (pluginOutput += chunk));
 child.stderr.on("data", (chunk) => (pluginOutput += chunk));
 
 try {
-	await pluginRegistered;
-	check("plugin registers with Stream Deck", true);
+	const registered = await Promise.race([pluginRegistered.then(() => true), sleep(10_000).then(() => false)]);
+	check("plugin registers with Stream Deck", registered);
+	if (!registered) throw new Error("The plugin didn't register with Stream Deck");
 	check("connects and authenticates to OBS", await waitFor(() => obsRequests.some((r) => r.requestType === "GetReplayBufferStatus")));
-	check("detects Replay Buffer Pro", await waitFor(() => obsRequests.some((r) => r.requestType === "GetHotkeyList")));
+	check("checks for Replay Buffer Pro's SaveClip request", await waitFor(() => replayBufferProChecks() === 1));
 
 	for (const context of Object.keys(contexts)) send("willAppear", context);
 	check("toggle shows OFF while the buffer is stopped", await faceBecomes("toggle", "toggle-off"), face("toggle"));
@@ -395,7 +429,7 @@ try {
 	let o = obsRequests.length;
 	send("keyDown", "save15");
 	check("save with the buffer off shows an alert", await waitFor(() => sdSince(m, "showAlert", "save15").length > 0));
-	check("save with the buffer off doesn't reach OBS", triggeredSince(o).length === 0);
+	check("save with the buffer off doesn't reach OBS", savesSince(o).length === 0);
 
 	m = sdMessages.length;
 	o = obsRequests.length;
@@ -408,72 +442,100 @@ try {
 
 	o = obsRequests.length;
 	send("keyDown", "save15");
-	check("15 sec triggers ReplayBufferPro.SaveButton1", await waitFor(() => triggeredSince(o)[0] === "ReplayBufferPro.SaveButton1"), triggeredSince(o)[0]);
+	check("15 sec asks Replay Buffer Pro for 15 seconds", await waitFor(() => savesSince(o)[0] === 15), savesSince(o).join(", "));
 	check("15 sec shows SAVING", await faceBecomes("save15", "save-15-saving"), face("save15"));
 	check("15 sec shows SAVED when OBS reports the file", await faceBecomes("save15", "save-15-saved"), face("save15"));
 	check("15 sec returns to ready", await faceBecomes("save15", "save-15-ready", 6_000), face("save15"));
+	check("a save is a single request to OBS", obsRequests.length - o === 1, obsRequests.slice(o).map((r) => r.requestType).join(", "));
 
-	o = obsRequests.length;
-	send("keyDown", "save60");
-	check("60 sec triggers ReplayBufferPro.SaveButton3", await waitFor(() => triggeredSince(o)[0] === "ReplayBufferPro.SaveButton3"), triggeredSince(o)[0]);
-
-	check("5 min key shows its face", face("save300") === "save-300-ready", face("save300"));
-	o = obsRequests.length;
-	send("keyDown", "save300");
-	check("5 min triggers ReplayBufferPro.SaveButton4", await waitFor(() => triggeredSince(o)[0] === "ReplayBufferPro.SaveButton4"), triggeredSince(o)[0]);
-
+	// A key longer than the buffer saves the whole buffer, like Replay Buffer Pro's own buttons.
 	m = sdMessages.length;
 	o = obsRequests.length;
 	send("keyDown", "save1800");
-	check("30 min with a 5 min buffer shows an alert", await waitFor(() => sdSince(m, "showAlert", "save1800").length > 0));
-	check("30 min with a 5 min buffer doesn't reach OBS", triggeredSince(o).length === 0);
+	check("30 min with a 5 min buffer asks for 30 min", await waitFor(() => savesSince(o)[0] === 1800), savesSince(o).join(", "));
+	check("30 min with a 5 min buffer saves the whole buffer", await waitFor(() => facesSince(m, "save1800").includes("save-1800-saved")), facesSince(m, "save1800").join(" → "));
+	check("30 min with a 5 min buffer shows no alert", sdSince(m, "showAlert", "save1800").length === 0);
+	check("the log says the clip was shortened", await waitFor(() => logText().includes("shortened to the whole buffer (5 min)")));
 
-	contexts.save30.settings = { slot: "5" };
-	o = obsRequests.length;
+	obsState.saveRefused = true;
+	m = sdMessages.length;
 	send("keyDown", "save30");
-	check("a manually chosen button is used", await waitFor(() => triggeredSince(o)[0] === "ReplayBufferPro.SaveButton5"), triggeredSince(o)[0]);
-	contexts.save30.settings = {};
+	check("a refused save shows an alert", await waitFor(() => sdSince(m, "showAlert", "save30").length > 0));
+	check("the log explains the refused save", await waitFor(() => logText().includes("is recording paused?")));
+	obsState.saveRefused = false;
 
-	obsState.mode = "Advanced";
-	obsState.recRBTime = "20";
-	m = sdMessages.length;
-	o = obsRequests.length;
-	send("keyDown", "save30");
-	check("clip longer than the buffer shows an alert", await waitFor(() => sdSince(m, "showAlert", "save30").length > 0));
-	check("clip longer than the buffer doesn't reach OBS", triggeredSince(o).length === 0);
-	check("buffer length comes from the active output mode", obsRequests.slice(o).some((r) => r.requestData?.parameterCategory === "AdvOut"));
-	obsState.mode = "Simple";
-	obsState.recRBTime = "300";
+	/** The status the settings panel gets when it opens; it also gets album lists, so pick the status. */
+	const panelStatus = async (context) => {
+		const start = sdMessages.length;
+		send("propertyInspectorDidAppear", context);
+		await waitFor(() => sdSince(start, "sendToPropertyInspector").some((x) => x.payload.event === "status"));
+		return sdSince(start, "sendToPropertyInspector").filter((x) => x.payload.event === "status").at(-1)?.payload;
+	};
+	const status = await panelStatus("save30");
+	check("settings panel gets the connection status", status?.connection === "connected" && status.replay === "started" && status.replayBufferPro === "ready", JSON.stringify(status));
 
-	mkdirSync(path.dirname(rbpSettingsFile), { recursive: true });
-	writeFileSync(rbpSettingsFile, JSON.stringify({ version: 1, save_buttons: [{ seconds: 10 }, { seconds: 60 }, { seconds: 15 }, { seconds: 120 }] }));
-	o = obsRequests.length;
-	send("keyDown", "save15");
-	check("customised buttons: 15 sec maps to button 3", await waitFor(() => triggeredSince(o)[0] === "ReplayBufferPro.SaveButton3"), triggeredSince(o)[0]);
-	m = sdMessages.length;
-	o = obsRequests.length;
-	send("keyDown", "save30");
-	check("customised buttons without 30 sec: alert, nothing sent", (await waitFor(() => sdSince(m, "showAlert", "save30").length > 0)) && triggeredSince(o).length === 0);
-
-	m = sdMessages.length;
-	send("propertyInspectorDidAppear", "save30");
-	await waitFor(() => sdSince(m, "sendToPropertyInspector").length > 0);
-	let status = sdSince(m, "sendToPropertyInspector").at(-1)?.payload;
-	check("settings panel gets the connection status", status?.connection === "connected" && status.replay === "started" && status.replayBufferPro === true, JSON.stringify(status));
-	check("settings panel explains the missing 30 sec button", status?.slot?.ok === false && /30 sec/.test(status.slot.detail), status?.slot?.detail);
-
-	rmSync(rbpSettingsFile);
-	m = sdMessages.length;
-	send("propertyInspectorDidAppear", "save60");
-	await waitFor(() => sdSince(m, "sendToPropertyInspector").length > 0);
-	status = sdSince(m, "sendToPropertyInspector").at(-1)?.payload;
-	check("settings panel shows the default button for 60 sec", status?.slot?.ok === true && /button 3/.test(status.slot.detail), status?.slot?.detail);
-
-	obsState.replayBufferPro = false;
+	obsState.replayBufferPro = null;
 	m = sdMessages.length;
 	send("keyDown", "save15");
 	check("missing Replay Buffer Pro shows an alert", await waitFor(() => sdSince(m, "showAlert", "save15").length > 0));
-	obsState.replayBufferPro = true;
+	check("the log says Replay Buffer Pro is missing", await waitFor(() => logText().includes("Replay Buffer Pro is not installed or not loaded in OBS")));
+
+	obsState.replayBufferPro = "1.7.0";
+	m = sdMessages.length;
+	send("keyDown", "save15");
+	check("an outdated Replay Buffer Pro shows an alert", await waitFor(() => sdSince(m, "showAlert", "save15").length > 0));
+	check("the log asks to update Replay Buffer Pro", await waitFor(() => logText().includes("Replay Buffer Pro is older than 1.8.0")));
+	check("settings panel says Replay Buffer Pro is outdated", (await panelStatus("save15"))?.replayBufferPro === "outdated");
+
+	// Updating Replay Buffer Pro and pressing the key again works without reconnecting.
+	obsState.replayBufferPro = "1.8.0";
+	m = sdMessages.length;
+	o = obsRequests.length;
+	send("keyDown", "save15");
+	check("saving works again after updating Replay Buffer Pro", await waitFor(() => facesSince(m, "save15").includes("save-15-saving")) && savesSince(o)[0] === 15, savesSince(o).join(", "));
+	check("settings panel shows Replay Buffer Pro as ready again", (await panelStatus("save15"))?.replayBufferPro === "ready");
+	await faceBecomes("save15", "save-15-ready", 6_000);
+
+	// ------------------------------------------------------------------- custom length key
+
+	check("custom key shows its default length", customLabel("saveCustom") === "2 min", customLabel("saveCustom"));
+	check("custom key uses the default colour", customSvg("saveCustom").includes("#2dd4bf"));
+	check("custom key's face is valid SVG", renders(customSvg("saveCustom")));
+	m = sdMessages.length;
+	o = obsRequests.length;
+	send("keyDown", "saveCustom");
+	check("custom key saves its default 2 min", await waitFor(() => savesSince(o)[0] === 120), savesSince(o).join(", "));
+	check("custom key shows SAVING, then SAVED", await waitFor(() => facesSince(m, "saveCustom").join(" ").includes("save-custom-saving save-custom-saved")), facesSince(m, "saveCustom").join(" → "));
+	await faceBecomes("saveCustom", "save-custom-ready", 6_000);
+
+	// Editing the length and colour: Stream Deck sends the key's new settings, and the face follows.
+	contexts.saveCustom.settings = { length: "45", unit: "sec", color: "#fb7185" };
+	send("didReceiveSettings", "saveCustom");
+	check("custom key shows the new length", await waitFor(() => customLabel("saveCustom") === "45 sec"), customLabel("saveCustom"));
+	check("custom key uses the chosen colour", customSvg("saveCustom").includes("#fb7185"));
+	o = obsRequests.length;
+	send("keyDown", "saveCustom");
+	check("custom key saves 45 seconds", await waitFor(() => savesSince(o)[0] === 45), savesSince(o).join(", "));
+	await faceBecomes("saveCustom", "save-custom-ready", 6_000);
+
+	let customStatus = await panelStatus("saveCustom");
+	check("settings panel describes the custom length", customStatus?.length?.ok === true && customStatus.length.detail === "Saves the last 45 sec.", JSON.stringify(customStatus?.length));
+
+	contexts.saveCustom.settings = { length: "7", unit: "h", color: '#fff" onload="alert(1)' };
+	send("didReceiveSettings", "saveCustom");
+	check("a custom length over 6 hours asks for a length", await waitFor(() => customLabel("saveCustom") === "SET LENGTH"), customLabel("saveCustom"));
+	check("an invalid colour falls back to the default", customSvg("saveCustom").includes("#2dd4bf") && !customSvg("saveCustom").includes("onload"));
+	customStatus = await panelStatus("saveCustom");
+	check("settings panel explains the invalid length", customStatus?.length?.ok === false && /6 hours/.test(customStatus.length.detail), JSON.stringify(customStatus?.length));
+	m = sdMessages.length;
+	o = obsRequests.length;
+	send("keyDown", "saveCustom");
+	check("custom key without a valid length shows an alert", await waitFor(() => sdSince(m, "showAlert", "saveCustom").length > 0));
+	check("custom key without a valid length doesn't reach OBS", savesSince(o).length === 0);
+
+	contexts.saveCustom.settings = {};
+	send("didReceiveSettings", "saveCustom");
+	await waitFor(() => customLabel("saveCustom") === "2 min");
 
 	// ------------------------------------------------------------------- chibisafe uploads
 
@@ -537,7 +599,7 @@ try {
 	);
 	check("upload: every upload request carries the API key", chibiRequests.slice(r).filter((x) => x.pathname === "/api/upload").every((x) => x.headers["x-api-key"] === chibi.apiKey));
 	check("upload: the link is copied to the clipboard", clipboard() === `https://chibi.test/${encodeURIComponent(path.basename(trimmedClip))}`, clipboard());
-	check("upload: key returns to ready", await faceBecomes("save15", "save-15-ready", 6_000), face("save15"));
+	await faceBecomes("save15", "save-15-ready", 6_000);
 
 	// Per-key albums: the save keys' dropdown offers the default album, no album, or any album.
 	m = sdMessages.length;

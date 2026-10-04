@@ -7,6 +7,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-10-04
+
+### Added
+
+- **Save Custom Length** key: saves the last 1 second to 6 hours. Set the length as a whole number of seconds,
+  minutes or hours, and the key's colour, in its settings. The key shows the length you entered, in the same
+  style as the other save keys, and uploads to chibisafe like them.
+
+### Changed
+
+- **Requires Replay Buffer Pro 1.8.0 or newer**, and so OBS Studio 32.2 or newer. The settings panel's status
+  line says when Replay Buffer Pro is missing or too old.
+- Save keys ask Replay Buffer Pro to save with its new `SaveClip` request instead of running its save buttons'
+  hotkeys. The keys no longer depend on the lengths of Replay Buffer Pro's own buttons.
+- A key longer than the replay buffer saves the whole buffer instead of showing the warning triangle. The log
+  says when a clip was shortened.
+- When Replay Buffer Pro refuses a save, for example while recording is paused, the key shows the warning
+  triangle and the log says why.
+- A key press sends one request to OBS instead of three.
+- The README explains why clips can be a little longer than the key says (Replay Buffer Pro cuts at keyframes)
+  and how to make them tighter.
+
+### Removed
+
+- The **OBS button** setting of the save keys. The plugin no longer reads Replay Buffer Pro's settings file.
+
 ## [1.2.0] - 2026-09-28
 
 ### Added
@@ -71,7 +97,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   and show the Stream Deck warning triangle instead of Replay Buffer Pro's pop-up in OBS.
 - Settings panel for the OBS WebSocket host, port and password, with a connection status line.
 
-[Unreleased]: https://github.com/jerptrs/streamdeck-replay-buffer-pro/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/jerptrs/streamdeck-replay-buffer-pro/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/jerptrs/streamdeck-replay-buffer-pro/compare/v1.2.0...v2.0.0
 [1.2.0]: https://github.com/jerptrs/streamdeck-replay-buffer-pro/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/jerptrs/streamdeck-replay-buffer-pro/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/jerptrs/streamdeck-replay-buffer-pro/compare/v1.0.0...v1.0.1

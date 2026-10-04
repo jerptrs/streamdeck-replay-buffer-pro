@@ -12,6 +12,9 @@ import { fileURLToPath } from "node:url";
 import {
 	actionListSvg,
 	categorySvg,
+	CUSTOM_DEFAULT_ACCENT,
+	CUSTOM_DEFAULT_LENGTH,
+	customSaveKeySvg,
 	pluginIconSvg,
 	SAVE_DURATIONS,
 	SAVE_VARIANTS,
@@ -63,6 +66,8 @@ const keyFaces: { name: string; svg: string }[] = [
 	...SAVE_DURATIONS.flatMap((duration) =>
 		SAVE_VARIANTS.map((variant) => ({ name: saveKeyName(duration, variant), svg: saveKeySvg(duration, variant) })),
 	),
+	// The plugin draws custom length keys itself; this one is only the manifest's default image.
+	{ name: "save-custom-ready", svg: customSaveKeySvg(CUSTOM_DEFAULT_LENGTH, CUSTOM_DEFAULT_ACCENT, "ready") },
 	...UPLOAD_VARIANTS.map((variant) => ({ name: uploadKeyName(variant), svg: uploadKeySvg(variant) })),
 ];
 
@@ -84,6 +89,13 @@ if (previewIndex !== -1 && process.argv[previewIndex + 1]) {
 	const rows = [
 		TOGGLE_VARIANTS.map((variant) => toggleKeySvg(variant)),
 		...SAVE_DURATIONS.map((duration) => SAVE_VARIANTS.map((variant) => saveKeySvg(duration, variant))),
+		[
+			customSaveKeySvg(CUSTOM_DEFAULT_LENGTH, CUSTOM_DEFAULT_ACCENT, "ready"),
+			customSaveKeySvg({ value: 45, unit: "sec" }, "#fb7185", "ready"),
+			customSaveKeySvg({ value: 90, unit: "min" }, "#818cf8", "ready"),
+			customSaveKeySvg({ value: 6, unit: "h" }, "#e879f9", "ready"),
+			customSaveKeySvg(undefined, CUSTOM_DEFAULT_ACCENT, "ready"),
+		],
 		([0, 30, 60, 90, "copied"] as const).map((variant) => uploadKeySvg(variant)),
 	];
 	const columns = Math.max(...rows.map((row) => row.length));

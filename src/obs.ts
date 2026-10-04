@@ -2,7 +2,14 @@ import streamDeck from "@elgato/streamdeck";
 import os from "node:os";
 
 import { EventSubscription, ObsError, type ObsEvent, ObsWebSocket } from "./obs-websocket";
-import { HOTKEY_PREFIX } from "./replay-buffer-pro";
+import {
+	describeProblem,
+	detectReplayBufferPro,
+	isUnregistered,
+	type ReplayBufferProState,
+	requestSaveClip,
+	type SaveClipResult,
+} from "./replay-buffer-pro";
 
 const logger = streamDeck.logger.createScope("OBS");
 
@@ -21,8 +28,8 @@ type ReplayState = "unknown" | "stopped" | "starting" | "started" | "stopping" |
 type ObsStatus = {
 	connection: ConnectionState;
 	replay: ReplayState;
-	/** Whether Replay Buffer Pro's save hotkeys are registered in OBS. */
-	replayBufferPro: boolean;
+	/** Whether Replay Buffer Pro 1.8.0 or newer is loaded in OBS. */
+	replayBufferPro: ReplayBufferProState;
 	/** Human-readable reason for the last connection problem, if any. */
 	error?: string;
 };
@@ -56,7 +63,7 @@ class ObsClient {
 	readonly socket = new ObsWebSocket();
 
 	#settings: Required<ObsSettings> = { host: DEFAULT_HOST, port: String(DEFAULT_PORT), password: "" };
-	#status: ObsStatus = { connection: "disconnected", replay: "unknown", replayBufferPro: false };
+	#status: ObsStatus = { connection: "disconnected", replay: "unknown", replayBufferPro: "unknown" };
 	#reconnectTimer: NodeJS.Timeout | undefined;
 	#settingsTimer: NodeJS.Timeout | undefined;
 	#started = false;
@@ -81,7 +88,7 @@ class ObsClient {
 		return this.#status.connection === "connected";
 	}
 
-	/** True when OBS runs on this computer, so Replay Buffer Pro's config files can be read directly. */
+	/** True when OBS runs on this computer, so the clips it saves can be read from disk. */
 	get isLocal(): boolean {
 		const host = this.#settings.host.trim().toLowerCase().replace(/^\[|\]$/g, "");
 		if (["localhost", "127.0.0.1", "::1", os.hostname().toLowerCase()].includes(host)) {
@@ -147,31 +154,29 @@ class ObsClient {
 	}
 
 	/**
-	 * Replay buffer length (seconds) from the active OBS profile, which is the same value Replay
-	 * Buffer Pro checks before saving. Returns undefined if it can't be read.
+	 * Asks Replay Buffer Pro to save the last `seconds`. When it's missing or too old, fails with that
+	 * explanation, which also ends up in the status.
 	 */
-	async getReplayBufferLength(): Promise<number | undefined> {
+	async saveClip(seconds: number): Promise<SaveClipResult> {
 		try {
-			const mode = await this.socket.call("GetProfileParameter", { parameterCategory: "Output", parameterName: "Mode" });
-			const section = (mode.parameterValue ?? mode.defaultParameterValue) === "Advanced" ? "AdvOut" : "SimpleOutput";
-			const length = await this.socket.call("GetProfileParameter", { parameterCategory: section, parameterName: "RecRBTime" });
-			const seconds = Number(length.parameterValue ?? length.defaultParameterValue);
-			return Number.isFinite(seconds) && seconds > 0 ? seconds : undefined;
+			const result = await requestSaveClip(this.socket, seconds);
+			// Replay Buffer Pro answered, so it's up to date even if OBS was restarted with a new version.
+			this.#update({ replayBufferPro: "ready" });
+			return result;
 		} catch (error) {
-			logger.warn(`Could not read replay buffer length: ${describe(error)}`);
-			return undefined;
+			if (!isUnregistered(error)) throw error;
+			throw new Error(describeProblem(await this.checkReplayBufferPro()) ?? describe(error));
 		}
 	}
 
-	/** Checks whether Replay Buffer Pro's hotkeys are registered, and records the result in the status. */
-	async detectReplayBufferPro(): Promise<boolean> {
+	/** Checks whether Replay Buffer Pro can save clips, and records the result in the status. */
+	async checkReplayBufferPro(): Promise<ReplayBufferProState> {
 		try {
-			const { hotkeys } = await this.socket.call("GetHotkeyList");
-			const found = hotkeys.some((name) => name.startsWith(HOTKEY_PREFIX));
-			this.#update({ replayBufferPro: found });
-			return found;
+			const state = await detectReplayBufferPro(this.socket);
+			this.#update({ replayBufferPro: state });
+			return state;
 		} catch (error) {
-			logger.warn(`Could not list OBS hotkeys: ${describe(error)}`);
+			logger.warn(`Could not check for Replay Buffer Pro: ${describe(error)}`);
 			return this.#status.replayBufferPro;
 		}
 	}
@@ -203,7 +208,7 @@ class ObsClient {
 			logger.info(`Connected to obs-websocket ${obsWebSocketVersion} at ${url}`);
 			this.#failures = 0;
 			this.#update({ connection: "connected" });
-			await Promise.all([this.refreshReplayState(), this.detectReplayBufferPro()]);
+			await Promise.all([this.refreshReplayState(), this.checkReplayBufferPro()]);
 		} catch (error) {
 			if (attempt !== this.#attempt) {
 				return;
