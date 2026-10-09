@@ -1,18 +1,19 @@
 import streamDeck from "@elgato/streamdeck";
 
 import { CUSTOM_SAVE_UUID, customLength, NO_ALBUM, type SaveClipSettings, saveActions } from "./actions/save-clip";
-import { TOGGLE_UUID, ToggleReplayBuffer } from "./actions/toggle-replay-buffer";
+import { type OpenObsSettings, TOGGLE_UUID, ToggleReplayBuffer } from "./actions/toggle-replay-buffer";
 import { chibisafe, type ChibisafeAlbum, type ChibisafeSettings } from "./chibisafe";
 import { obs, type ObsSettings } from "./obs";
 import { findObsApp } from "./obs-app";
 
-/** Settings shared by all keys: the OBS connection and chibisafe uploads. */
-type GlobalSettings = ObsSettings & ChibisafeSettings;
+/** Settings shared by all keys: the OBS connection, opening OBS, and chibisafe uploads. */
+type GlobalSettings = ObsSettings & OpenObsSettings & ChibisafeSettings;
 
 // "trace" would log every message, including the OBS password in the global settings.
 streamDeck.logger.setLevel("info");
 
-streamDeck.actions.registerAction(new ToggleReplayBuffer());
+const toggle = new ToggleReplayBuffer();
+streamDeck.actions.registerAction(toggle);
 saveActions.forEach((action) => streamDeck.actions.registerAction(action));
 
 /** What the On/Off key opens when it shows "NO OBS", for its settings panel. */
@@ -20,7 +21,7 @@ async function obsAppStatus(): Promise<{ ok: boolean; detail: string }> {
 	if (!obs.isLocal) {
 		return { ok: true, detail: "OBS runs on another computer, so this key can't open it." };
 	}
-	const app = await findObsApp(obs.obsPath, false);
+	const app = await findObsApp(toggle.obsPath, false);
 	return app.ok ? { ok: true, detail: `Pressing NO OBS opens ${app.detail}` } : app;
 }
 
@@ -146,6 +147,7 @@ chibisafe.onStatusChange((status) => {
 
 function configure(settings: GlobalSettings): void {
 	obs.configure(settings);
+	toggle.obsPath = settings.obsPath?.trim() ?? "";
 	chibisafe.configure(settings);
 }
 

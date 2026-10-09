@@ -2,8 +2,8 @@ import streamDeck, { action, type KeyAction, type KeyDownEvent, SingletonAction,
 
 import { toggleKeyName, type ToggleVariant } from "../icons";
 import { keyImage } from "../key-images";
-import { describe, obs } from "../obs";
-import { findObsApp, isObsRunning, openObs } from "../obs-app";
+import { describe, obs, OPENING_WAIT_MS } from "../obs";
+import { findObsApp, obsRunning, openObs } from "../obs-app";
 
 const logger = streamDeck.logger.createScope("Toggle");
 
@@ -11,13 +11,16 @@ const logger = streamDeck.logger.createScope("Toggle");
 const OUTPUT_RUNNING = 500;
 const OUTPUT_NOT_RUNNING = 501;
 
-/** How long after opening OBS the key waits for OBS's WebSocket server to accept the connection. */
-const OPENING_TIMEOUT_MS = 60_000;
-
 export const TOGGLE_UUID = "com.replay-buffer-pro.obs.toggle";
 
 /** The toggle has no per-key settings; OBS connection details are global. */
 type ToggleSettings = Record<string, never>;
+
+/** Global settings for opening OBS from the "NO OBS" face. */
+export type OpenObsSettings = {
+	/** The "OBS app" setting; empty finds a standard install. */
+	obsPath?: string;
+};
 
 /**
  * One key that starts or stops OBS's replay buffer and shows whether it's running. State 0 is
@@ -27,23 +30,27 @@ type ToggleSettings = Record<string, never>;
 @action({ UUID: TOGGLE_UUID })
 export class ToggleReplayBuffer extends SingletonAction<ToggleSettings> {
 	readonly #lastImage = new Map<string, string>();
-	/** Set while OBS, opened from this key, hasn't accepted the connection yet. */
-	#opening: NodeJS.Timeout | undefined;
 	/** Set while a press checks whether OBS can be opened, so a double press can't open it twice. */
 	#checking = false;
+	#wasOpening = false;
+	/** The "OBS app" setting, from the global settings. */
+	obsPath = "";
 
 	constructor() {
 		super();
 		obs.onStatusChange((status) => {
-			// Once OBS accepts the connection, "loading" keeps the key on STARTING OBS until OBS is ready.
-			if (this.#opening && ["loading", "connected", "auth-failed"].includes(status.connection)) {
-				clearTimeout(this.#opening);
-				this.#opening = undefined;
-				if (status.connection === "auth-failed") {
-					logger.warn("OBS opened, but rejected the WebSocket password");
-					this.actions.forEach((action) => action.isKey() && void action.showAlert());
-				}
+			// Opening ends when OBS accepts the connection ("loading" keeps STARTING OBS until it's ready),
+			// rejects the password, or doesn't answer in time.
+			if (this.#wasOpening && !status.opening && status.connection !== "loading" && status.connection !== "connected") {
+				logger.warn(
+					status.connection === "auth-failed"
+						? "OBS opened, but rejected the WebSocket password"
+						: `OBS didn't accept the connection within ${OPENING_WAIT_MS / 1000} seconds; ` +
+								"check that its WebSocket server is enabled (Tools → WebSocket Server Settings) and the port and password match",
+				);
+				this.actions.forEach((action) => action.isKey() && void action.showAlert());
 			}
+			this.#wasOpening = status.opening;
 			this.#renderAll();
 		});
 	}
@@ -81,7 +88,7 @@ export class ToggleReplayBuffer extends SingletonAction<ToggleSettings> {
 	/** "NO OBS" was pressed: starts OBS when it's installed on this computer and isn't running yet. */
 	async #pressedWithoutObs(key: KeyDownEvent<ToggleSettings>["action"]): Promise<void> {
 		// OBS is already on its way.
-		if (this.#opening || this.#checking || obs.status.connection === "loading") {
+		if (obs.status.opening || this.#checking || obs.status.connection === "loading") {
 			return;
 		}
 		this.#checking = true;
@@ -105,11 +112,16 @@ export class ToggleReplayBuffer extends SingletonAction<ToggleSettings> {
 			return key.showAlert();
 		}
 
-		const app = await findObsApp(obs.obsPath);
-		if (await isObsRunning(app)) {
+		const app = await findObsApp(this.obsPath);
+		const running = await obsRunning(app);
+		if (running === true) {
 			logger.warn("OBS is running, but its WebSocket server can't be reached; check Tools → WebSocket Server Settings in OBS");
 			obs.retryNow();
 			return key.showAlert();
+		}
+		if (running === undefined) {
+			// Opening it anyway is safe: a second OBS asks before it starts.
+			logger.warn("Couldn't check whether OBS is already running; opening it anyway");
 		}
 		if (!app.ok) {
 			logger.error(`Can't open OBS: ${app.detail}`);
@@ -124,17 +136,7 @@ export class ToggleReplayBuffer extends SingletonAction<ToggleSettings> {
 		}
 
 		logger.info(`Opened OBS (${app.detail}); connecting once it's up`);
-		this.#opening = setTimeout(() => {
-			this.#opening = undefined;
-			logger.warn(
-				`OBS didn't accept the connection within ${OPENING_TIMEOUT_MS / 1000} seconds; ` +
-					"check that its WebSocket server is enabled (Tools → WebSocket Server Settings) and the port and password match",
-			);
-			this.#renderAll();
-			this.actions.forEach((action) => action.isKey() && void action.showAlert());
-		}, OPENING_TIMEOUT_MS);
 		obs.expectOpening();
-		this.#renderAll();
 	}
 
 	#renderAll(): void {
@@ -142,10 +144,10 @@ export class ToggleReplayBuffer extends SingletonAction<ToggleSettings> {
 	}
 
 	async #render(action: KeyAction<ToggleSettings>): Promise<void> {
-		const { connection, replay } = obs.status;
+		const { connection, replay, opening } = obs.status;
 		let variant: ToggleVariant;
 		if (connection !== "connected") {
-			variant = this.#opening || connection === "loading" ? "obs-starting" : "offline";
+			variant = opening || connection === "loading" ? "obs-starting" : "offline";
 		} else if (replay === "unavailable") {
 			variant = "unavailable";
 		} else if (replay === "starting" || replay === "stopping") {

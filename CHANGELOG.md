@@ -7,6 +7,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- When OBS, opened from the On/Off key, took longer than a minute to start (for example because of a dialog), the
+  plugin could need up to another minute to connect once OBS was up.
+- If the plugin can't check whether OBS is already running, the log now says so before it opens OBS.
+
 ## [2.1.0] - 2026-10-04
 
 ### Added

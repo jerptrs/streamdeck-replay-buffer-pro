@@ -83,8 +83,6 @@ async function startObs() {
 
 			if (!obsState.ready) return fail(207, "OBS is not ready to perform the request.");
 			switch (requestType) {
-				case "GetVersion":
-					return ok({ obsVersion: "32.2.0", obsWebSocketVersion: "5.6.0" });
 				case "GetReplayBufferStatus":
 					return ok({ outputActive: obsState.replayActive });
 				case "GetHotkeyList": {
@@ -841,7 +839,7 @@ try {
 	obsState.ready = false;
 	o = obsRequests.length;
 	await startObs();
-	check("connects within seconds once OBS's WebSocket server is up", await waitFor(() => obsRequests.slice(o).some((r) => r.requestType === "GetVersion")));
+	check("connects within seconds once OBS's WebSocket server is up", await waitFor(() => obsRequests.slice(o).some((r) => r.requestType === "GetReplayBufferStatus")));
 	await sleep(1_500);
 	check("toggle stays on STARTING OBS while OBS is still starting", face("toggle") === "toggle-obs-starting", face("toggle"));
 	check("settings panel says OBS is starting", (await panelStatus("toggle"))?.connection === "loading");

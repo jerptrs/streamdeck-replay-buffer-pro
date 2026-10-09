@@ -29,7 +29,7 @@
         "build": "rollup -c",
         "watch": "rollup -c -w --watch.onEnd=\"streamdeck restart com.replay-buffer-pro.obs\"",
         "typecheck": "tsc --noEmit",
-        "test": "npm run build && node test/e2e.mjs",
+        "test": "npm run build && node test/obs-app.test.mjs && node test/reconnect.test.mjs && node test/e2e.mjs",
         "icons": "node scripts/render-icons.ts --preview docs/key-preview.png",
         "validate": "npm run build && streamdeck validate com.replay-buffer-pro.obs.sdPlugin",
         "pack": "npm run build && streamdeck pack com.replay-buffer-pro.obs.sdPlugin --output dist --force"

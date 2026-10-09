@@ -14,7 +14,7 @@ export type ObsApp =
 	| { ok: false; detail: string };
 
 /** How long the settings panel reuses a lookup; pressing the key always looks again. */
-const CACHE_MS = 30_000;
+const CACHE_MS = 5 * 60_000;
 const TOOL_TIMEOUT_MS = 5_000;
 
 let cache: { key: string; at: number; app: Promise<ObsApp> } | undefined;
@@ -37,25 +37,33 @@ function run(command: string, args: string[]): Promise<{ code: number; stdout: s
 	});
 }
 
+/** The folder in `reg query <key> /ve` output, whatever the system language calls the default value. */
+export function parseRegistryDefault(stdout: string): string | undefined {
+	return stdout.match(/REG_SZ[ \t]+([^\r\n]+)/)?.[1]?.trim() || undefined;
+}
+
+/** Whether `tasklist /FO CSV /NH` output lists `image`; without a match it prints a localized note instead. */
+export function tasklistHasImage(stdout: string, image: string): boolean {
+	return stdout.toLowerCase().includes(`"${image.toLowerCase()}"`);
+}
+
 /** OBS's install folders from the registry entry its installer writes, in both registry views. */
 async function registryInstallDirs(): Promise<string[]> {
-	const dirs: string[] = [];
-	for (const view of ["/reg:64", "/reg:32"]) {
-		const { code, stdout } = await run("reg", ["query", "HKLM\\SOFTWARE\\OBS Studio", "/ve", view]);
-		const dir = code === 0 ? stdout.match(/REG_SZ\s+(.+)/)?.[1]?.trim() : undefined;
-		if (dir) dirs.push(dir);
-	}
-	return dirs;
+	const results = await Promise.all(
+		["/reg:64", "/reg:32"].map((view) => run("reg", ["query", "HKLM\\SOFTWARE\\OBS Studio", "/ve", view])),
+	);
+	return results.flatMap(({ code, stdout }) => (code === 0 ? (parseRegistryDefault(stdout) ?? []) : []));
 }
 
 /** Standard install locations: the installer, Steam, and on macOS the Applications folders. */
 async function autoDetect(): Promise<ObsApp> {
 	if (process.platform === "win32") {
-		const dirs = [
+		// Both registry views usually name the same folder as the default install; check each folder once.
+		const dirs = new Set([
 			...(await registryInstallDirs()),
 			path.join(process.env.ProgramFiles ?? "C:\\Program Files", "obs-studio"),
 			path.join(process.env["ProgramFiles(x86)"] ?? "C:\\Program Files (x86)", "Steam", "steamapps", "common", "OBS Studio"),
-		];
+		]);
 		for (const dir of dirs) {
 			const exe = path.join(dir, "bin", "64bit", "obs64.exe");
 			if (await isFile(exe)) return { ok: true, command: exe, args: [], cwd: path.dirname(exe), detail: exe };
@@ -97,14 +105,27 @@ export function findObsApp(setting: string, fresh = true): Promise<ObsApp> {
 	return app;
 }
 
-/** Whether OBS is running, whatever state its WebSocket server is in. */
-export async function isObsRunning(app: ObsApp): Promise<boolean> {
+/**
+ * Whether OBS is running, whatever state its WebSocket server is in; undefined when the check itself
+ * failed (the tool is missing or timed out).
+ */
+export async function obsRunning(app: ObsApp): Promise<boolean | undefined> {
 	if (process.platform === "win32") {
 		const image = app.ok && app.command.toLowerCase().endsWith(".exe") ? path.basename(app.command) : "obs64.exe";
-		const { stdout } = await run("tasklist", ["/FI", `IMAGENAME eq ${image}`, "/FO", "CSV", "/NH"]);
-		return stdout.toLowerCase().includes(`"${image.toLowerCase()}"`);
+		const { code, stdout } = await run("tasklist", ["/FI", `IMAGENAME eq ${image}`, "/FO", "CSV", "/NH"]);
+		return tasklistRunning(code, stdout, image);
 	}
-	return (await run("pgrep", ["-x", process.platform === "darwin" ? "OBS" : "obs"])).code === 0;
+	return pgrepRunning((await run("pgrep", ["-x", process.platform === "darwin" ? "OBS" : "obs"])).code);
+}
+
+/** `tasklist` exits with 0 whether or not anything matched; any other code means the check failed. */
+export function tasklistRunning(code: number, stdout: string, image: string): boolean | undefined {
+	return code === 0 ? tasklistHasImage(stdout, image) : undefined;
+}
+
+/** `pgrep` exits with 0 when it found the process, 1 when it didn't, and anything else when it failed. */
+export function pgrepRunning(code: number): boolean | undefined {
+	return code === 0 ? true : code === 1 ? false : undefined;
 }
 
 /** Starts OBS detached from the plugin, so it keeps running when Stream Deck restarts the plugin. */
