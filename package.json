@@ -35,17 +35,17 @@
         "pack": "npm run build && streamdeck pack com.replay-buffer-pro.obs.sdPlugin --output dist --force"
     },
     "devDependencies": {
-        "@elgato/cli": "^1.10.1",
+        "@elgato/cli": "^1.10.2",
         "@resvg/resvg-js": "^2.6.2",
         "@rollup/plugin-commonjs": "^29.0.3",
         "@rollup/plugin-node-resolve": "^16.0.3",
         "@rollup/plugin-typescript": "^12.3.0",
-        "@types/node": "~24.19.1",
-        "rollup": "^4.63.6",
+        "@types/node": "~24.19.2",
+        "rollup": "^4.64.3",
         "typescript": "^5.9.3",
         "ws": "^8.22.0"
     },
     "dependencies": {
-        "@elgato/streamdeck": "^3.0.1"
+        "@elgato/streamdeck": "^3.0.2"
     }
 }
